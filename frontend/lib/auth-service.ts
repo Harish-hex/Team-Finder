@@ -1,3 +1,4 @@
+import { supabase } from './supabase'
 
 export interface UserProfile {
     email: string;
@@ -73,16 +74,64 @@ export const AuthService = {
     },
 
     async getUser(email: string): Promise<UserProfile | null> {
-        await delay(200);
-        return users[email] || null;
+        // Get current Supabase user
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return null
+
+        // Check if user has a profile in database
+        const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('user_id', user.id)
+            .single()
+
+        if (error || !profile) {
+            // No profile exists
+            return {
+                email,
+                isVerified: true,
+                profile: undefined
+            }
+        }
+
+        // Profile exists
+        return {
+            email,
+            isVerified: true,
+            profile: {
+                displayName: profile.display_name,
+                university: profile.university,
+                interests: profile.interests,
+                experienceLevel: profile.experience_level,
+                isMentor: profile.is_mentor
+            }
+        }
     },
 
     async saveProfile(email: string, profile: UserProfile['profile']): Promise<{ success: boolean }> {
-        await delay(1000);
-        if (users[email]) {
-            users[email].profile = profile;
+        if (!profile) return { success: false }
+
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return { success: false }
+
+        const { error } = await supabase
+            .from('profiles')
+            .upsert({
+                user_id: user.id,
+                display_name: profile.displayName,
+                university: profile.university,
+                interests: profile.interests,
+                experience_level: profile.experienceLevel,
+                is_mentor: profile.isMentor,
+                updated_at: new Date().toISOString()
+            })
+
+        if (error) {
+            console.error('Error saving profile:', error)
+            return { success: false }
         }
-        return { success: true };
+
+        return { success: true }
     },
 
     // Helper for components to get current user based on pseudo-session

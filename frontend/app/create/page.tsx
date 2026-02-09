@@ -21,6 +21,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Navbar } from '@/components/navbar'
+import { DatabaseService } from '@/lib/database-service'
+import { toast } from 'sonner'
 
 const eventTypes = [
   { value: 'hackathon', label: 'Hackathon' },
@@ -75,16 +77,35 @@ export default function CreateTeamPage() {
     e.preventDefault()
     setIsSubmitting(true)
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    try {
+      // Create team in database
+      const result = await DatabaseService.createTeam({
+        name: formData.eventName,
+        description: formData.description,
+        eventType: formData.eventType,
+        techStack: formData.techStack,
+        rolesNeeded: formData.rolesNeeded,
+        teamSize: parseInt(formData.teamSize),
+        isBeginnerFriendly: formData.isBeginnerFriendly,
+        hasMentor: formData.hasMentor
+      })
 
-    setIsSubmitting(false)
-    setIsSuccess(true)
+      if (result.success) {
+        setIsSubmitting(false)
+        setIsSuccess(true)
 
-    // Redirect after success
-    setTimeout(() => {
-      router.push('/teams')
-    }, 2000)
+        // Redirect after success
+        setTimeout(() => {
+          router.push('/teams')
+        }, 2000)
+      } else {
+        toast.error(result.error || 'Failed to create team')
+        setIsSubmitting(false)
+      }
+    } catch (error) {
+      toast.error('Failed to create team')
+      setIsSubmitting(false)
+    }
   }
 
   if (isSuccess) {

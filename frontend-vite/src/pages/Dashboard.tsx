@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useNavigate } from 'react-router-dom';
@@ -5,6 +6,35 @@ import { useNavigate } from 'react-router-dom';
 export const Dashboard = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
+
+    useEffect(() => {
+        const checkProfileAndRedirect = async () => {
+            if (!user) return;
+
+            console.log('🔍 Dashboard - Checking profile for user:', user.id);
+
+            // Check if user has a profile
+            const { data: profile, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('user_id', user.id)
+                .single();
+
+            console.log('🔍 Profile check result:', { profile, error });
+
+            if (profile) {
+                // Existing user with profile → go to Next.js landing page
+                console.log('✅ Profile exists, redirecting to Next.js landing page');
+                window.location.href = 'http://localhost:3000';
+            } else {
+                // New user without profile → go to Next.js onboarding
+                console.log('❌ No profile found, redirecting to Next.js onboarding');
+                window.location.href = 'http://localhost:3000/onboarding/profile';
+            }
+        };
+
+        checkProfileAndRedirect();
+    }, [user]);
 
     const handleSignOut = async () => {
         await supabase.auth.signOut();

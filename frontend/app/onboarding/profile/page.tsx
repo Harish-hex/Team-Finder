@@ -11,7 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { AuthService, UserProfile } from '@/lib/auth-service'
+import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -23,6 +23,11 @@ const INTERESTS = [
 export default function MobileOnboardingPage() {
     const router = useRouter()
     const [loading, setLoading] = useState(false)
+    const [authLoading, setAuthLoading] = useState(true)
+
+    // Store both email and user ID
+    const [email, setEmail] = useState<string | null>(null)
+    const [userId, setUserId] = useState<string | null>(null)
 
     // Form State
     const [displayName, setDisplayName] = useState('')
@@ -31,18 +36,56 @@ export default function MobileOnboardingPage() {
     const [experienceLevel, setExperienceLevel] = useState<'Beginner' | 'Intermediate' | 'Advanced'>('Beginner')
     const [isMentor, setIsMentor] = useState(false)
 
-    // Retrieve email from session
-    const [email, setEmail] = useState<string | null>(null)
-
     useEffect(() => {
-        const storedEmail = sessionStorage.getItem('auth_email')
-        if (!storedEmail) {
-            // In a real app, maybe redirect to login. For prototype, we might allow testing or redirect.
-            // safely redirect
-            router.push('/auth')
-            return
+        const handleUserFound = async (user: { id: string; email?: string | null }) => {
+            console.log('✅ User found:', user.email, 'ID:', user.id)
+            setEmail(user.email || null)
+            setUserId(user.id)
+            setAuthLoading(false)
+
+            // Check if profile already exists
+            const { data: existingProfile, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('user_id', user.id)
+                .single()
+
+            console.log('🔍 Profile check:', { existingProfile, error })
+
+            if (existingProfile) {
+                console.log('✅ Profile already exists, redirecting to landing')
+                toast.success('Profile already exists!')
+                router.push('/')
+            }
         }
-        setEmail(storedEmail)
+
+        const checkAuth = async () => {
+            // First check if we already have a session
+            const { data: { session } } = await supabase.auth.getSession()
+
+            console.log('🔍 Initial session check:', session?.user?.id)
+
+            if (session?.user) {
+                handleUserFound(session.user)
+            } else {
+                console.log('⏳ No immediate session, waiting for auth state change...')
+                setAuthLoading(false)
+            }
+        }
+
+        // Listen for auth changes (e.g., from URL hash)
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            console.log('🔔 Auth state changed:', event, session?.user?.email)
+            if (session?.user) {
+                handleUserFound(session.user)
+            }
+        })
+
+        checkAuth()
+
+        return () => {
+            subscription.unsubscribe()
+        }
     }, [router])
 
     const toggleInterest = (interest: string) => {
@@ -55,9 +98,18 @@ export default function MobileOnboardingPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (!email) return
+
+        console.log('🚀 Form submitted', { userId, email, displayName, university, selectedInterests, experienceLevel, isMentor })
+
+        if (!userId) {
+            console.error('❌ No user ID found')
+            toast.error('No authenticated user found. Please try logging in again.')
+            router.push('/auth')
+            return
+        }
 
         if (!displayName || !university || selectedInterests.length === 0) {
+            console.error('❌ Validation failed', { displayName, university, selectedInterests })
             toast.error('Please fill in all required fields')
             return
         }
@@ -65,161 +117,199 @@ export default function MobileOnboardingPage() {
         setLoading(true)
 
         try {
-            const profileData: UserProfile['profile'] = {
-                displayName,
-                university,
-                interests: selectedInterests,
-                experienceLevel,
-                isMentor
+            // Save profile directly using the stored user ID
+            console.log('💾 Saving profile for user:', userId)
+
+            const { data, error } = await supabase
+                .from('profiles')
+                .upsert({
+                    user_id: userId,
+                    display_name: displayName,
+                    university: university,
+                    interests: selectedInterests,
+                    experience_level: experienceLevel,
+                    is_mentor: isMentor,
+                    updated_at: new Date().toISOString()
+                })
+                .select()
+
+            if (error) {
+                console.error('❌ Error saving profile:', error)
+                toast.error(`Failed to save profile: ${error.message}`)
+                setLoading(false)
+                return
             }
 
-            await AuthService.saveProfile(email, profileData)
+            console.log('✅ Profile saved successfully:', data)
             toast.success('Profile created! Welcome aboard.')
-            router.push('/') // Redirect to home/dashboard
+            router.push('/')
+
         } catch (error) {
-            toast.error('Failed to save profile')
+            console.error('❌ Unexpected error saving profile:', error)
+            toast.error('Failed to save profile. Please try again.')
         } finally {
             setLoading(false)
         }
     }
 
-    return (
-        <div className="relative min-h-screen py-10 px-4 flex justify-center">
-            {/* Background elements */}
-            <div className="fixed inset-0 -z-10 bg-[#0a0f1a]">
-                <div className="absolute inset-0 bg-gradient-to-b from-indigo-950/20 via-transparent to-[#0a0f1a]" />
+    // Show loading while checking auth
+    if (authLoading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-[#0a0f1a]">
+                <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
             </div>
+        )
+    }
 
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="w-full max-w-2xl"
-            >
-                <Card className="border-white/10 bg-[#0d1320]/80 backdrop-blur-md shadow-2xl">
-                    <CardHeader>
-                        <CardTitle className="text-3xl font-bold text-white flex items-center gap-2">
-                            <Rocket className="w-8 h-8 text-indigo-400" />
-                            Setup your profile
-                        </CardTitle>
-                        <CardDescription className="text-blue-100/60 text-lg">
+    // If no user is authenticated, show message
+    if (!userId) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-[#0a0f1a] p-4">
+                <p className="text-white text-center">Please log in to create your profile.</p>
+                <Button onClick={() => window.location.href = 'http://localhost:5173'}>
+                    Go to Login
+                </Button>
+            </div>
+        )
+    }
+
+    return (
+        <div className="relative min-h-screen bg-gradient-to-b from-[#0a0f1a] via-[#0d1525] to-[#0a1018]">
+            <div className="absolute inset-0 opacity-[0.015]" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noise\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.8\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noise)\'/%3E%3C/svg%3E")' }} />
+
+            <div className="relative mx-auto max-w-md px-4 py-8 sm:py-12">
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4 }}
+                >
+                    {/* Header */}
+                    <div className="mb-8 text-center">
+                        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-indigo-500/20">
+                            <Sparkles className="h-8 w-8 text-indigo-400" />
+                        </div>
+                        <h1 className="text-2xl font-bold text-white">Setup your profile</h1>
+                        <p className="mt-2 text-sm text-gray-400">
                             Introduction yourself to the community. You can change this later.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <form onSubmit={handleSubmit} className="space-y-8">
+                        </p>
+                        {email && (
+                            <p className="mt-1 text-xs text-indigo-400">{email}</p>
+                        )}
+                    </div>
 
-                            {/* Basic Info */}
-                            <div className="grid gap-6 md:grid-cols-2">
-                                <div className="space-y-2">
-                                    <Label htmlFor="displayName" className="text-blue-100">Display Name</Label>
-                                    <Input
-                                        id="displayName"
-                                        placeholder="e.g. Alex Chen"
-                                        value={displayName}
-                                        onChange={e => setDisplayName(e.target.value)}
-                                        className="bg-white/5 border-white/10 text-white focus:border-indigo-500/50"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="university" className="text-blue-100">University / College</Label>
-                                    <Input
-                                        id="university"
-                                        placeholder="e.g. Stanform University"
-                                        value={university}
-                                        onChange={e => setUniversity(e.target.value)}
-                                        className="bg-white/5 border-white/10 text-white focus:border-indigo-500/50"
-                                    />
-                                </div>
-                            </div>
+                    {/* Form */}
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        {/* Display Name */}
+                        <div className="space-y-2">
+                            <Label htmlFor="displayName" className="text-white">Display Name</Label>
+                            <Input
+                                id="displayName"
+                                placeholder="Your name"
+                                value={displayName}
+                                onChange={(e) => setDisplayName(e.target.value)}
+                                className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
+                            />
+                        </div>
 
-                            {/* Interests */}
-                            <div className="space-y-3">
-                                <Label className="text-blue-100">Areas of Interest <span className="text-xs text-muted-foreground">(Select at least one)</span></Label>
-                                <div className="flex flex-wrap gap-2">
-                                    {INTERESTS.map(interest => {
-                                        const isSelected = selectedInterests.includes(interest)
-                                        return (
-                                            <Badge
-                                                key={interest}
-                                                variant="outline"
-                                                onClick={() => toggleInterest(interest)}
-                                                className={cn(
-                                                    "cursor-pointer px-4 py-2 text-sm transition-all border-white/10 select-none",
-                                                    isSelected
-                                                        ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/50 hover:bg-indigo-500/30"
-                                                        : "hover:bg-white/5 text-blue-100/60 hover:text-blue-100"
-                                                )}
-                                            >
-                                                {isSelected && <Check className="w-3 h-3 mr-1.5 inline-block" />}
-                                                {interest}
-                                            </Badge>
-                                        )
-                                    })}
-                                </div>
-                            </div>
+                        {/* University */}
+                        <div className="space-y-2">
+                            <Label htmlFor="university" className="text-white">University / College</Label>
+                            <Input
+                                id="university"
+                                placeholder="Your university or college"
+                                value={university}
+                                onChange={(e) => setUniversity(e.target.value)}
+                                className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
+                            />
+                        </div>
 
-                            {/* Experience Level */}
-                            <div className="space-y-3">
-                                <Label className="text-blue-100">Experience Level</Label>
-                                <RadioGroup
-                                    value={experienceLevel}
-                                    onValueChange={(val: any) => setExperienceLevel(val)}
-                                    className="grid grid-cols-1 md:grid-cols-3 gap-4"
-                                >
-                                    {['Beginner', 'Intermediate', 'Advanced'].map((level) => (
-                                        <div key={level}>
-                                            <RadioGroupItem value={level} id={level} className="peer sr-only" />
-                                            <Label
-                                                htmlFor={level}
-                                                className="flex flex-col items-center justify-between rounded-md border-2 border-white/10 bg-white/5 p-4 hover:bg-white/10 hover:text-white peer-data-[state=checked]:border-indigo-500 peer-data-[state=checked]:text-indigo-400 [&:has([data-state=checked])]:border-indigo-500 cursor-pointer transition-all"
-                                            >
-                                                <span className="text-base font-semibold">{level}</span>
-                                            </Label>
-                                        </div>
-                                    ))}
-                                </RadioGroup>
-                            </div>
-
-                            {/* Mentor Checkbox */}
-                            <div className="flex items-center space-x-2 rounded-lg border border-white/10 bg-white/5 p-4">
-                                <Checkbox
-                                    id="mentor"
-                                    checked={isMentor}
-                                    onCheckedChange={(c) => setIsMentor(!!c)}
-                                    className="border-white/20 data-[state=checked]:bg-indigo-500 data-[state=checked]:text-white"
-                                />
-                                <div className="grid gap-1.5 leading-none">
-                                    <Label
-                                        htmlFor="mentor"
-                                        className="text-sm font-medium leading-none text-blue-100 peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                        {/* Interests */}
+                        <div className="space-y-3">
+                            <Label className="text-white">Areas of Interest <span className="text-gray-500">(Select at least one)</span></Label>
+                            <div className="flex flex-wrap gap-2">
+                                {INTERESTS.map((interest) => (
+                                    <Badge
+                                        key={interest}
+                                        variant="outline"
+                                        className={cn(
+                                            "cursor-pointer transition-colors",
+                                            selectedInterests.includes(interest)
+                                                ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/50"
+                                                : "bg-white/5 text-gray-400 border-white/10 hover:bg-white/10"
+                                        )}
+                                        onClick={() => toggleInterest(interest)}
                                     >
-                                        I’m open to mentoring others
-                                    </Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        Help students who are just starting out.
-                                    </p>
-                                </div>
+                                        {selectedInterests.includes(interest) && (
+                                            <Check className="h-3 w-3 mr-1" />
+                                        )}
+                                        {interest}
+                                    </Badge>
+                                ))}
                             </div>
+                        </div>
 
-                            <Button
-                                type="submit"
-                                className="w-full h-12 bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-lg shadow-indigo-500/20 text-lg"
-                                disabled={loading}
+                        {/* Experience Level */}
+                        <div className="space-y-3">
+                            <Label className="text-white">Experience Level</Label>
+                            <RadioGroup
+                                value={experienceLevel}
+                                onValueChange={(value) => setExperienceLevel(value as 'Beginner' | 'Intermediate' | 'Advanced')}
+                                className="flex gap-2"
                             >
-                                {loading ? (
-                                    <Loader2 className="animate-spin mr-2" />
-                                ) : (
-                                    <>
-                                        Complete Profile
-                                        <ChevronRight className="ml-2 h-5 w-5" />
-                                    </>
-                                )}
-                            </Button>
+                                {['Beginner', 'Intermediate', 'Advanced'].map((level) => (
+                                    <div
+                                        key={level}
+                                        className={cn(
+                                            "flex-1 cursor-pointer rounded-lg border p-3 text-center transition-colors",
+                                            experienceLevel === level
+                                                ? "border-indigo-500/50 bg-indigo-500/20 text-indigo-300"
+                                                : "border-white/10 bg-white/5 text-gray-400 hover:bg-white/10"
+                                        )}
+                                        onClick={() => setExperienceLevel(level as 'Beginner' | 'Intermediate' | 'Advanced')}
+                                    >
+                                        <RadioGroupItem value={level} id={level} className="sr-only" />
+                                        <span className="text-sm font-medium">{level}</span>
+                                    </div>
+                                ))}
+                            </RadioGroup>
+                        </div>
 
-                        </form>
-                    </CardContent>
-                </Card>
-            </motion.div>
+                        {/* Mentor Option */}
+                        <div className="flex items-start space-x-3 rounded-lg border border-white/10 bg-white/5 p-4">
+                            <Checkbox
+                                id="mentor"
+                                checked={isMentor}
+                                onCheckedChange={(checked) => setIsMentor(checked === true)}
+                                className="mt-0.5"
+                            />
+                            <div className="flex-1">
+                                <Label htmlFor="mentor" className="text-white cursor-pointer">
+                                    I'm open to mentoring others
+                                </Label>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Help students who are just starting out.
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Submit Button */}
+                        <Button
+                            type="submit"
+                            disabled={loading}
+                            className="w-full h-12 bg-indigo-500 hover:bg-indigo-400 text-white font-semibold"
+                        >
+                            {loading ? (
+                                <Loader2 className="h-5 w-5 animate-spin" />
+                            ) : (
+                                <>
+                                    Complete Profile
+                                    <ChevronRight className="h-5 w-5 ml-1" />
+                                </>
+                            )}
+                        </Button>
+                    </form>
+                </motion.div>
+            </div>
         </div>
     )
 }

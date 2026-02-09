@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Search, Filter, Sparkles, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
@@ -18,6 +18,7 @@ import {
 import { Navbar } from '@/components/navbar'
 import { TeamCard } from '@/components/team-card'
 import { mockTeams } from '@/lib/mock-data'
+import { DatabaseService } from '@/lib/database-service'
 
 const eventTypes = ['all', 'hackathon', 'ctf', 'competition', 'project'] as const
 const techStacks = ['React', 'Python', 'TypeScript', 'Go', 'C++', 'Rust', 'Java', 'C']
@@ -30,26 +31,39 @@ export default function TeamsPage() {
   const [selectedRoles, setSelectedRoles] = useState<string[]>([])
   const [beginnerFriendly, setBeginnerFriendly] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
+  const [teams, setTeams] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Fetch teams from database
+  useEffect(() => {
+    const fetchTeams = async () => {
+      setLoading(true)
+      const data = await DatabaseService.getTeams()
+      setTeams(data)
+      setLoading(false)
+    }
+    fetchTeams()
+  }, [])
 
   const filteredTeams = useMemo(() => {
-    return mockTeams.filter((team) => {
+    return teams.filter((team) => {
       // Search filter
       if (search) {
         const searchLower = search.toLowerCase()
         const matchesSearch =
-          team.eventName.toLowerCase().includes(searchLower) ||
+          team.name.toLowerCase().includes(searchLower) ||
           team.description.toLowerCase().includes(searchLower) ||
-          team.techStack.some((tech) => tech.toLowerCase().includes(searchLower))
+          team.tech_stack.some((tech: string) => tech.toLowerCase().includes(searchLower))
         if (!matchesSearch) return false
       }
 
       // Event type filter
-      if (eventType !== 'all' && team.eventType !== eventType) return false
+      if (eventType !== 'all' && team.event_type !== eventType) return false
 
       // Tech stack filter
       if (selectedTech.length > 0) {
         const hasMatchingTech = selectedTech.some((tech) =>
-          team.techStack.some((t) => t.toLowerCase().includes(tech.toLowerCase()))
+          team.tech_stack.some((t: string) => t.toLowerCase().includes(tech.toLowerCase()))
         )
         if (!hasMatchingTech) return false
       }
@@ -57,17 +71,17 @@ export default function TeamsPage() {
       // Roles filter
       if (selectedRoles.length > 0) {
         const hasMatchingRole = selectedRoles.some((role) =>
-          team.rolesNeeded.some((r) => r.toLowerCase().includes(role.toLowerCase()))
+          team.roles_needed.some((r: string) => r.toLowerCase().includes(role.toLowerCase()))
         )
         if (!hasMatchingRole) return false
       }
 
       // Beginner friendly filter
-      if (beginnerFriendly && !team.isBeginnerFriendly) return false
+      if (beginnerFriendly && !team.is_beginner_friendly) return false
 
       return true
     })
-  }, [search, eventType, selectedTech, selectedRoles, beginnerFriendly])
+  }, [teams, search, eventType, selectedTech, selectedRoles, beginnerFriendly])
 
   const toggleTech = (tech: string) => {
     setSelectedTech((prev) =>
@@ -181,11 +195,10 @@ export default function TeamsPage() {
                     <Badge
                       key={tech}
                       variant={selectedTech.includes(tech) ? 'default' : 'outline'}
-                      className={`cursor-pointer transition-all ${
-                        selectedTech.includes(tech)
-                          ? 'border-violet-500/50 bg-violet-500 text-violet-50 shadow-sm shadow-violet-500/20'
-                          : 'hover:border-violet-500/30 hover:bg-violet-500/10'
-                      }`}
+                      className={`cursor-pointer transition-all ${selectedTech.includes(tech)
+                        ? 'border-violet-500/50 bg-violet-500 text-violet-50 shadow-sm shadow-violet-500/20'
+                        : 'hover:border-violet-500/30 hover:bg-violet-500/10'
+                        }`}
                       onClick={() => toggleTech(tech)}
                     >
                       {tech}
@@ -202,11 +215,10 @@ export default function TeamsPage() {
                     <Badge
                       key={role}
                       variant={selectedRoles.includes(role) ? 'default' : 'outline'}
-                      className={`cursor-pointer transition-all ${
-                        selectedRoles.includes(role)
-                          ? 'border-violet-500/50 bg-violet-500 text-violet-50 shadow-sm shadow-violet-500/20'
-                          : 'hover:border-violet-500/30 hover:bg-violet-500/10'
-                      }`}
+                      className={`cursor-pointer transition-all ${selectedRoles.includes(role)
+                        ? 'border-violet-500/50 bg-violet-500 text-violet-50 shadow-sm shadow-violet-500/20'
+                        : 'hover:border-violet-500/30 hover:bg-violet-500/10'
+                        }`}
                       onClick={() => toggleRole(role)}
                     >
                       {role}
@@ -218,11 +230,10 @@ export default function TeamsPage() {
               {/* Beginner Friendly Toggle */}
               <div>
                 <Label className="mb-3 block text-sm font-medium">Experience Level</Label>
-                <div className={`flex items-center gap-3 rounded-lg border p-3 transition-colors ${
-                  beginnerFriendly 
-                    ? 'border-emerald-500/30 bg-emerald-500/10' 
-                    : 'border-border bg-secondary/50'
-                }`}>
+                <div className={`flex items-center gap-3 rounded-lg border p-3 transition-colors ${beginnerFriendly
+                  ? 'border-emerald-500/30 bg-emerald-500/10'
+                  : 'border-border bg-secondary/50'
+                  }`}>
                   <Switch
                     id="beginner-friendly"
                     checked={beginnerFriendly}
@@ -248,7 +259,13 @@ export default function TeamsPage() {
         </div>
 
         {/* Team Grid */}
-        {filteredTeams.length > 0 ? (
+        {loading ? (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="h-80 animate-pulse rounded-xl bg-white/5" />
+            ))}
+          </div>
+        ) : filteredTeams.length > 0 ? (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {filteredTeams.map((team, index) => (
               <motion.div

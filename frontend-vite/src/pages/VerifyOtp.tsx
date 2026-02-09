@@ -31,8 +31,34 @@ export const VerifyOtp = () => {
             setError(error.message);
             setLoading(false);
         } else {
-            // Success! Redirect to Next.js landing page
-            window.location.href = 'http://localhost:3000';
+            // Success! Check if user has a profile
+            const { data: { user } } = await supabase.auth.getUser();
+
+            if (user) {
+                // Check if profile exists in database
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .single();
+
+                // We need to get the session first
+                const { data: { session } } = await supabase.auth.getSession();
+
+                const getRedirectUrlWithSession = (baseUrl: string) => {
+                    if (!session) return baseUrl;
+                    const hash = `access_token=${session.access_token}&refresh_token=${session.refresh_token}&expires_in=${session.expires_in}&token_type=bearer&type=recovery`;
+                    return `${baseUrl}#${hash}`;
+                };
+
+                if (profile) {
+                    // Existing user with profile → go to Next.js landing page
+                    window.location.href = getRedirectUrlWithSession('http://localhost:3000');
+                } else {
+                    // New user limits → go to Next.js onboarding
+                    window.location.href = getRedirectUrlWithSession('http://localhost:3000/onboarding/profile');
+                }
+            }
         }
     };
 

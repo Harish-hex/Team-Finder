@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   GraduationCap,
@@ -7,20 +8,75 @@ import {
   Code,
   Trophy,
   Edit2,
+  Loader2,
+  Trash2,
+  LogOut,
+  Bell,
+  Check,
+  X,
+  ChevronRight,
+  AlertCircle,
 } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Navbar } from '@/components/navbar'
-import { AwardBadge } from '@/components/award-badge'
-import { mockUser, mockTeams } from '@/lib/mock-data'
+import { supabase, Team } from '@/lib/supabase'
+import { DatabaseService } from '@/lib/database-service'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 
-const experienceLevelColors = {
-  beginner: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-  intermediate: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
-  advanced: 'bg-violet-500/20 text-violet-400 border-violet-500/30',
-  expert: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+interface ProfileData {
+  id: string
+  user_id: string
+  display_name: string
+  university: string
+  interests: string[]
+  experience_level: 'Beginner' | 'Intermediate' | 'Advanced'
+  is_mentor: boolean
+  created_at: string
+}
+
+interface TeamWithApplications extends Team {
+  pending_applications: number
+}
+
+interface ApplicationData {
+  id: string
+  user_id: string
+  preferred_role: string
+  experience: string
+  message: string
+  status: string
+  created_at: string
+  display_name?: string
+  university?: string
+}
+
+const experienceLevelColors: Record<string, string> = {
+  Beginner: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+  Intermediate: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+  Advanced: 'bg-violet-500/20 text-violet-400 border-violet-500/30',
 }
 
 const container = {
@@ -37,7 +93,169 @@ const item = {
 }
 
 export default function ProfilePage() {
-  const userTeams = mockTeams.filter((team) => team.creatorId === mockUser.id)
+  const router = useRouter()
+  const [profile, setProfile] = useState<ProfileData | null>(null)
+  const [ownedTeams, setOwnedTeams] = useState<TeamWithApplications[]>([])
+  const [joinedTeams, setJoinedTeams] = useState<Team[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [deletingTeamId, setDeletingTeamId] = useState<string | null>(null)
+  const [leavingTeamId, setLeavingTeamId] = useState<string | null>(null)
+  const [selectedTeamForApplications, setSelectedTeamForApplications] = useState<string | null>(null)
+  const [applications, setApplications] = useState<ApplicationData[]>([])
+  const [loadingApplications, setLoadingApplications] = useState(false)
+  const [processingApplicationId, setProcessingApplicationId] = useState<string | null>(null)
+
+  const fetchData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+      if (authError || !user) {
+        router.push('/auth')
+        return
+      }
+
+      // Fetch profile
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .single()
+
+      if (profileError) {
+        if (profileError.code === 'PGRST116') {
+          router.push('/onboarding/profile')
+          return
+        }
+        setError('Failed to load profile')
+        return
+      }
+
+      setProfile(profileData)
+
+      // Fetch owned teams with application counts
+      const teamsWithApps = await DatabaseService.getMyTeamsWithApplications()
+      setOwnedTeams(teamsWithApps)
+
+      // Fetch joined teams
+      const joined = await DatabaseService.getJoinedTeams()
+      setJoinedTeams(joined)
+
+    } catch (err) {
+      console.error('Unexpected error:', err)
+      setError('An unexpected error occurred')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchData()
+  }, [router])
+
+  const handleDeleteTeam = async (teamId: string) => {
+    setDeletingTeamId(teamId)
+    const result = await DatabaseService.deleteTeam(teamId)
+    if (result.success) {
+      setOwnedTeams(prev => prev.filter(t => t.id !== teamId))
+    } else {
+      alert(result.error || 'Failed to delete team')
+    }
+    setDeletingTeamId(null)
+  }
+
+  const handleLeaveTeam = async (teamId: string) => {
+    setLeavingTeamId(teamId)
+    const result = await DatabaseService.leaveTeam(teamId)
+    if (result.success) {
+      setJoinedTeams(prev => prev.filter(t => t.id !== teamId))
+    } else {
+      alert(result.error || 'Failed to leave team')
+    }
+    setLeavingTeamId(null)
+  }
+
+  const handleViewApplications = async (teamId: string) => {
+    setSelectedTeamForApplications(teamId)
+    setLoadingApplications(true)
+    const apps = await DatabaseService.getTeamApplications(teamId)
+    setApplications(apps)
+    setLoadingApplications(false)
+  }
+
+  const handleApproveApplication = async (applicationId: string) => {
+    setProcessingApplicationId(applicationId)
+    const result = await DatabaseService.approveApplication(applicationId)
+    if (result.success) {
+      setApplications(prev => prev.filter(a => a.id !== applicationId))
+      // Refresh owned teams to update application count
+      const teamsWithApps = await DatabaseService.getMyTeamsWithApplications()
+      setOwnedTeams(teamsWithApps)
+    } else {
+      alert(result.error || 'Failed to approve application')
+    }
+    setProcessingApplicationId(null)
+  }
+
+  const handleRejectApplication = async (applicationId: string) => {
+    setProcessingApplicationId(applicationId)
+    const result = await DatabaseService.rejectApplication(applicationId)
+    if (result.success) {
+      setApplications(prev => prev.filter(a => a.id !== applicationId))
+      // Refresh owned teams to update application count
+      const teamsWithApps = await DatabaseService.getMyTeamsWithApplications()
+      setOwnedTeams(teamsWithApps)
+    } else {
+      alert(result.error || 'Failed to reject application')
+    }
+    setProcessingApplicationId(null)
+  }
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="relative min-h-screen">
+        <div className="fixed inset-0 -z-10 bg-gradient-to-b from-[#0a0f1a] via-[#0d1525] to-[#0a1018]" />
+        <Navbar />
+        <div className="flex min-h-screen items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+        </div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="relative min-h-screen">
+        <div className="fixed inset-0 -z-10 bg-gradient-to-b from-[#0a0f1a] via-[#0d1525] to-[#0a1018]" />
+        <Navbar />
+        <div className="flex min-h-screen flex-col items-center justify-center gap-4">
+          <p className="text-red-400">{error}</p>
+          <Button onClick={() => window.location.reload()}>Retry</Button>
+        </div>
+      </div>
+    )
+  }
+
+  // No profile state
+  if (!profile) {
+    return (
+      <div className="relative min-h-screen">
+        <div className="fixed inset-0 -z-10 bg-gradient-to-b from-[#0a0f1a] via-[#0d1525] to-[#0a1018]" />
+        <Navbar />
+        <div className="flex min-h-screen flex-col items-center justify-center gap-4">
+          <p className="text-white">No profile found.</p>
+          <Link href="/onboarding/profile">
+            <Button>Create Profile</Button>
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="relative min-h-screen">
@@ -67,9 +285,12 @@ export default function ProfilePage() {
               <div className="flex flex-col items-start gap-6 md:flex-row md:items-center">
                 {/* Avatar */}
                 <Avatar className="h-24 w-24 border-4 border-background shadow-xl shadow-violet-500/10">
-                  <AvatarImage src={mockUser.avatar || "/placeholder.svg"} alt={mockUser.name} />
+                  <AvatarImage
+                    src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.display_name}`}
+                    alt={profile.display_name}
+                  />
                   <AvatarFallback className="bg-violet-500 text-2xl text-violet-50">
-                    {mockUser.name.charAt(0)}
+                    {profile.display_name.charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
 
@@ -77,9 +298,9 @@ export default function ProfilePage() {
                 <div className="flex-1">
                   <div className="flex flex-wrap items-center gap-3">
                     <h1 className="text-2xl font-bold text-foreground md:text-3xl">
-                      {mockUser.name}
+                      {profile.display_name}
                     </h1>
-                    {mockUser.isMentor && (
+                    {profile.is_mentor && (
                       <div className="flex items-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-sm font-medium text-violet-400">
                         <GraduationCap className="h-4 w-4" />
                         Mentor
@@ -87,162 +308,300 @@ export default function ProfilePage() {
                     )}
                   </div>
 
-                  <p className="mt-1 text-lg text-muted-foreground">{mockUser.role}</p>
+                  <p className="mt-1 text-lg text-muted-foreground">{profile.university}</p>
 
                   <div className="mt-3 flex flex-wrap items-center gap-3">
                     <Badge
                       variant="outline"
-                      className={experienceLevelColors[mockUser.experienceLevel]}
+                      className={experienceLevelColors[profile.experience_level] || 'bg-gray-500/20 text-gray-400 border-gray-500/30'}
                     >
-                      {mockUser.experienceLevel.charAt(0).toUpperCase() +
-                        mockUser.experienceLevel.slice(1)}
+                      {profile.experience_level}
                     </Badge>
                   </div>
                 </div>
 
                 {/* Edit Button */}
-                <Button variant="outline" className="gap-2 bg-transparent">
-                  <Edit2 className="h-4 w-4" />
-                  Edit Profile
-                </Button>
+                <Link href="/onboarding/profile">
+                  <Button variant="outline" className="gap-2 bg-transparent">
+                    <Edit2 className="h-4 w-4" />
+                    Edit Profile
+                  </Button>
+                </Link>
               </div>
             </div>
           </motion.div>
 
-          {/* About Section */}
-          <motion.div variants={item} className="rounded-xl border border-border bg-card p-6">
-            <h2 className="mb-4 text-lg font-semibold text-foreground">About</h2>
-            <p className="leading-relaxed text-muted-foreground">{mockUser.about}</p>
-          </motion.div>
-
-          {/* Skills Section */}
+          {/* Interests Section */}
           <motion.div variants={item} className="rounded-xl border border-border bg-card p-6">
             <div className="mb-4 flex items-center gap-2">
               <Code className="h-5 w-5 text-violet-400" />
-              <h2 className="text-lg font-semibold text-foreground">Skills</h2>
+              <h2 className="text-lg font-semibold text-foreground">Interests</h2>
             </div>
             <div className="flex flex-wrap gap-2">
-              {mockUser.skills.map((skill) => (
-                <span
-                  key={skill}
-                  className="rounded-lg bg-secondary px-3 py-1.5 text-sm font-medium text-secondary-foreground"
-                >
-                  {skill}
-                </span>
-              ))}
-            </div>
-          </motion.div>
-
-          {/* Awards Section - Collectible Showcase */}
-          <motion.div variants={item} className="rounded-xl border border-border bg-card overflow-hidden">
-            {/* Header with collection count */}
-            <div className="border-b border-border bg-gradient-to-r from-violet-500/10 via-transparent to-transparent px-6 py-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-500/20">
-                    <Trophy className="h-5 w-5 text-violet-400" />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-semibold text-foreground">Collection</h2>
-                    <p className="text-sm text-muted-foreground">{mockUser.awards.length} awards earned</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <span className="h-2 w-2 rounded-full bg-amber-700" />
-                  <span className="h-2 w-2 rounded-full bg-slate-400" />
-                  <span className="h-2 w-2 rounded-full bg-amber-400" />
-                  <span className="h-2 w-2 rounded-full bg-violet-400" />
-                </div>
-              </div>
-            </div>
-
-            {/* Awards grid - card display */}
-            <div className="p-6">
-              <div className="flex flex-wrap justify-center gap-4">
-                {mockUser.awards.map((award, index) => (
-                  <motion.div
-                    key={award.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.08, type: 'spring', stiffness: 300 }}
-                    className="flex flex-col items-center"
+              {profile.interests && profile.interests.length > 0 ? (
+                profile.interests.map((interest) => (
+                  <span
+                    key={interest}
+                    className="rounded-lg bg-secondary px-3 py-1.5 text-sm font-medium text-secondary-foreground"
                   >
-                    <AwardBadge award={award} size="lg" />
-                    <p className="mt-2.5 max-w-[96px] text-center text-xs font-medium text-foreground/90 leading-tight">
-                      {award.name}
-                    </p>
-                  </motion.div>
-                ))}
-              </div>
-
-              {/* Locked awards - mysterious slots */}
-              <div className="mt-8 border-t border-border/50 pt-6">
-                <p className="mb-4 text-center text-sm font-medium text-muted-foreground">
-                  Locked Awards
-                </p>
-                <div className="flex flex-wrap justify-center gap-4">
-                  {[1, 2, 3, 4].map((i) => (
-                    <motion.div
-                      key={i}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: 0.5 + i * 0.1 }}
-                      className="group relative"
-                    >
-                      <div className="flex h-28 w-24 flex-col items-center justify-center rounded-lg border-2 border-dashed border-border/50 bg-muted/10 transition-colors hover:border-violet-500/30 hover:bg-violet-500/5">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted/30">
-                          <span className="text-lg font-bold text-muted-foreground/40">?</span>
-                        </div>
-                        <span className="mt-2 text-[10px] uppercase tracking-wider text-muted-foreground/40">
-                          Hidden
-                        </span>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              </div>
+                    {interest}
+                  </span>
+                ))
+              ) : (
+                <p className="text-muted-foreground">No interests added yet.</p>
+              )}
             </div>
           </motion.div>
 
-          {/* Teams Participated - Card list */}
-          {userTeams.length > 0 && (
-            <motion.div variants={item} className="rounded-xl border border-border bg-card p-6">
-              <div className="mb-6 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Users className="h-5 w-5 text-violet-400" />
-                  <h2 className="text-lg font-semibold text-foreground">Teams</h2>
-                </div>
+          {/* Your Teams (Owned) */}
+          <motion.div variants={item} className="rounded-xl border border-border bg-card p-6">
+            <div className="mb-6 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-violet-400" />
+                <h2 className="text-lg font-semibold text-foreground">Your Teams</h2>
               </div>
+              <Link href="/create">
+                <Button size="sm" variant="outline" className="gap-1">
+                  Create Team
+                </Button>
+              </Link>
+            </div>
 
+            {ownedTeams.length > 0 ? (
               <div className="space-y-3">
-                {userTeams.map((team) => (
-                  <Link key={team.id} href={`/teams/${team.id}`}>
-                    <div className="group flex items-center justify-between rounded-lg border border-border bg-secondary/30 p-4 transition-all hover:border-violet-500/30 hover:bg-violet-500/5">
-                      <div>
-                        <p className="font-medium text-foreground transition-colors group-hover:text-violet-300">{team.eventName}</p>
+                {ownedTeams.map((team) => (
+                  <div key={team.id} className="group rounded-lg border border-border bg-secondary/30 p-4 transition-all hover:border-violet-500/30 hover:bg-violet-500/5">
+                    <div className="flex items-start justify-between gap-4">
+                      <Link href={`/teams/${team.id}`} className="flex-1">
+                        <p className="font-medium text-foreground transition-colors group-hover:text-violet-300">
+                          {team.name}
+                        </p>
                         <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
-                          <span className="capitalize">{team.eventType}</span>
-                          <span>
-                            {team.currentMembers.length}/{team.teamSize} members
-                          </span>
+                          <span className="capitalize">{team.event_type}</span>
+                          <span>Max {team.max_members} members</span>
                         </div>
-                      </div>
-                      <div className="flex -space-x-2">
-                        {team.currentMembers.slice(0, 3).map((member) => (
-                          <Avatar key={member.id} className="h-8 w-8 border-2 border-card">
-                            <AvatarImage src={member.avatar || "/placeholder.svg"} alt={member.name} />
-                            <AvatarFallback className="bg-secondary text-xs">
-                              {member.name.charAt(0)}
-                            </AvatarFallback>
-                          </Avatar>
-                        ))}
+                      </Link>
+
+                      <div className="flex items-center gap-2">
+                        {/* View Applications Button */}
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="relative gap-1"
+                              onClick={() => handleViewApplications(team.id)}
+                            >
+                              <Bell className="h-4 w-4" />
+                              Applications
+                              {team.pending_applications > 0 && (
+                                <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs text-white">
+                                  {team.pending_applications}
+                                </span>
+                              )}
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-lg">
+                            <DialogHeader>
+                              <DialogTitle>Applications for {team.name}</DialogTitle>
+                              <DialogDescription>
+                                Review and manage team join requests
+                              </DialogDescription>
+                            </DialogHeader>
+
+                            {loadingApplications ? (
+                              <div className="flex items-center justify-center py-8">
+                                <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
+                              </div>
+                            ) : applications.length > 0 ? (
+                              <div className="max-h-96 space-y-4 overflow-y-auto">
+                                {applications.filter(a => a.status === 'pending').map((app) => (
+                                  <div key={app.id} className="rounded-lg border border-border bg-secondary/30 p-4">
+                                    <div className="flex items-start justify-between">
+                                      <div>
+                                        <p className="font-medium text-foreground">
+                                          {app.display_name || 'Unknown User'}
+                                        </p>
+                                        <p className="text-sm text-muted-foreground">
+                                          {app.university || 'Unknown University'}
+                                        </p>
+                                      </div>
+                                      <Badge variant="outline" className="text-xs">
+                                        {app.preferred_role}
+                                      </Badge>
+                                    </div>
+                                    <p className="mt-2 text-sm text-muted-foreground">
+                                      <strong>Experience:</strong> {app.experience}
+                                    </p>
+                                    <p className="mt-1 text-sm text-foreground">
+                                      {app.message}
+                                    </p>
+                                    <div className="mt-4 flex gap-2">
+                                      <Button
+                                        size="sm"
+                                        className="gap-1 bg-emerald-600 hover:bg-emerald-700"
+                                        disabled={processingApplicationId === app.id}
+                                        onClick={() => handleApproveApplication(app.id)}
+                                      >
+                                        {processingApplicationId === app.id ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                          <Check className="h-4 w-4" />
+                                        )}
+                                        Approve
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="gap-1 border-red-500/30 text-red-400 hover:bg-red-500/10"
+                                        disabled={processingApplicationId === app.id}
+                                        onClick={() => handleRejectApplication(app.id)}
+                                      >
+                                        <X className="h-4 w-4" />
+                                        Reject
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center py-8 text-center">
+                                <AlertCircle className="h-8 w-8 text-muted-foreground mb-2" />
+                                <p className="text-muted-foreground">No pending applications</p>
+                              </div>
+                            )}
+                          </DialogContent>
+                        </Dialog>
+
+                        {/* Delete Team Button */}
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1 border-red-500/30 text-red-400 hover:bg-red-500/10"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete Team</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Are you sure you want to delete &quot;{team.name}&quot;? This action cannot be undone.
+                                All team members will be removed and pending applications will be deleted.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                className="bg-red-600 hover:bg-red-700"
+                                onClick={() => handleDeleteTeam(team.id)}
+                                disabled={deletingTeamId === team.id}
+                              >
+                                {deletingTeamId === team.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                ) : null}
+                                Delete Team
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     </div>
-                  </Link>
+                  </div>
                 ))}
               </div>
-            </motion.div>
-          )}
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <p className="text-muted-foreground">You haven't created any teams yet.</p>
+                <Link href="/create" className="mt-2 text-sm text-indigo-400 hover:text-indigo-300">
+                  Create your first team →
+                </Link>
+              </div>
+            )}
+          </motion.div>
+
+          {/* Teams You've Joined */}
+          <motion.div variants={item} className="rounded-xl border border-border bg-card p-6">
+            <div className="mb-6 flex items-center gap-2">
+              <Users className="h-5 w-5 text-cyan-400" />
+              <h2 className="text-lg font-semibold text-foreground">Teams You've Joined</h2>
+            </div>
+
+            {joinedTeams.length > 0 ? (
+              <div className="space-y-3">
+                {joinedTeams.map((team) => (
+                  <div key={team.id} className="group rounded-lg border border-border bg-secondary/30 p-4 transition-all hover:border-cyan-500/30 hover:bg-cyan-500/5">
+                    <div className="flex items-start justify-between gap-4">
+                      <Link href={`/teams/${team.id}`} className="flex-1">
+                        <p className="font-medium text-foreground transition-colors group-hover:text-cyan-300">
+                          {team.name}
+                        </p>
+                        <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
+                          <span className="capitalize">{team.event_type}</span>
+                          <span>Max {team.max_members} members</span>
+                        </div>
+                      </Link>
+
+                      {/* Leave Team Button */}
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1 border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                          >
+                            <LogOut className="h-4 w-4" />
+                            Leave
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Leave Team</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to leave &quot;{team.name}&quot;? You will need to apply again if you want to rejoin.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              className="bg-amber-600 hover:bg-amber-700"
+                              onClick={() => handleLeaveTeam(team.id)}
+                              disabled={leavingTeamId === team.id}
+                            >
+                              {leavingTeamId === team.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                              ) : null}
+                              Leave Team
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <p className="text-muted-foreground">You haven't joined any teams yet.</p>
+                <Link href="/teams" className="mt-2 text-sm text-indigo-400 hover:text-indigo-300">
+                  Browse teams to join →
+                </Link>
+              </div>
+            )}
+          </motion.div>
+
+          {/* Achievements Placeholder */}
+          <motion.div variants={item} className="rounded-xl border border-border bg-card p-6">
+            <div className="flex items-center gap-2">
+              <Trophy className="h-5 w-5 text-amber-400" />
+              <h2 className="text-lg font-semibold text-foreground">Achievements</h2>
+            </div>
+            <p className="mt-4 text-center text-muted-foreground">
+              No achievements yet. Join events and teams to earn badges!
+            </p>
+          </motion.div>
         </motion.div>
       </main>
     </div>

@@ -9,5 +9,14 @@ console.log('🔍 Debug - Anon Key (first 30 chars):', supabaseAnonKey.substring
 
 export const supabase = createClient(
     supabaseUrl || 'https://placeholder.supabase.co',
-    supabaseAnonKey || 'placeholder'
+    supabaseAnonKey || 'placeholder',
+    {
+        auth: {
+            storage: window.localStorage,
+            storageKey: 'teamfinder-auth',
+            autoRefreshToken: true,
+            persistSession: true,
+            detectSessionInUrl: true
+        }
+    }
 );
