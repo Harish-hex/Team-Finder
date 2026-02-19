@@ -235,12 +235,14 @@ export const DatabaseService = {
         preferredRole: string
         experience: string
         message: string
+        contactInfo: string
     }): Promise<{ success: boolean; error?: string }> {
         const { data, error } = await supabase.rpc('apply_to_team', {
             p_team_id: applicationData.teamId,
             p_preferred_role: applicationData.preferredRole,
             p_experience: applicationData.experience,
-            p_message: applicationData.message
+            p_message: applicationData.message,
+            p_contact_info: applicationData.contactInfo
         })
 
         if (error) {
@@ -271,25 +273,39 @@ export const DatabaseService = {
 
     /**
      * Get applications for a team (admin only)
-     * Uses direct query instead of RPC to avoid ambiguous column issues
+     * Uses RPC function that JOINs profiles server-side (bypasses RLS)
+     * Falls back to direct query if RPC fails
      */
     async getTeamApplications(teamId: string) {
+        // Try RPC first (preferred - bypasses RLS for profile data)
+        const { data, error } = await supabase.rpc('get_team_applications', {
+            p_team_id: teamId
+        })
+
+        if (!error && data) {
+            // Map RPC response fields to match what the UI expects
+            return (data || []).map((app: any) => ({
+                id: app.application_id,
+                user_id: app.user_id,
+                preferred_role: app.preferred_role,
+                experience: app.experience,
+                message: app.message,
+                status: app.status,
+                created_at: app.created_at,
+                display_name: app.user_name || 'Unknown User',
+                university: app.user_university || 'Unknown',
+                experience_level: app.user_experience_level,
+                contact_info: app.contact_info || ''
+            }))
+        }
+
+        // RPC failed - log details and fall back to direct query
+        console.error('RPC get_team_applications failed:', error?.message, error?.code, error?.details, error?.hint)
+
+        // Fallback: direct query approach
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return []
 
-        // Verify user is team admin
-        const { data: team } = await supabase
-            .from('teams')
-            .select('created_by')
-            .eq('id', teamId)
-            .single()
-
-        if (!team || team.created_by !== user.id) {
-            console.error('Not authorized to view applications for this team')
-            return []
-        }
-
-        // Get applications for the team
         const { data: applications, error: appError } = await supabase
             .from('team_applications')
             .select('*')
@@ -297,28 +313,26 @@ export const DatabaseService = {
             .order('created_at', { ascending: false })
 
         if (appError || !applications) {
-            console.error('Error fetching applications:', appError)
+            console.error('Fallback query also failed:', appError)
             return []
         }
 
-        // Get profiles for all applicants
+        // Try to get profiles (may fail due to RLS, but we handle gracefully)
         const userIds = applications.map(app => app.user_id)
         const { data: profiles } = await supabase
             .from('profiles')
             .select('user_id, display_name, university')
             .in('user_id', userIds)
 
-        // Merge profile data with applications
-        const applicationsWithProfiles = applications.map(app => {
+        return applications.map(app => {
             const profile = profiles?.find(p => p.user_id === app.user_id)
             return {
                 ...app,
                 display_name: profile?.display_name || 'Unknown User',
-                university: profile?.university || 'Unknown'
+                university: profile?.university || 'Unknown',
+                contact_info: app.contact_info || ''
             }
         })
-
-        return applicationsWithProfiles
     },
 
     /**

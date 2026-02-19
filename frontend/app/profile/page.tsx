@@ -71,6 +71,8 @@ interface ApplicationData {
   created_at: string
   display_name?: string
   university?: string
+  experience_level?: string
+  contact_info?: string
 }
 
 const experienceLevelColors: Record<string, string> = {
@@ -433,6 +435,11 @@ export default function ProfilePage() {
                                     <p className="mt-2 text-sm text-muted-foreground">
                                       <strong>Experience:</strong> {app.experience}
                                     </p>
+                                    {app.contact_info && (
+                                      <p className="mt-1 text-sm text-muted-foreground">
+                                        <strong>Phone:</strong> {app.contact_info}
+                                      </p>
+                                    )}
                                     <p className="mt-1 text-sm text-foreground">
                                       {app.message}
                                     </p>

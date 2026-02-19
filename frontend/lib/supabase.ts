@@ -61,6 +61,7 @@ export interface TeamApplication {
     preferred_role: string
     experience: string
     message: string
+    contact_info: string
     status: 'pending' | 'approved' | 'rejected'
     created_at: string
     updated_at: string

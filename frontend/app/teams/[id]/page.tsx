@@ -70,6 +70,7 @@ export default function TeamDetailPage() {
     role: '',
     experience: '',
     message: '',
+    contactInfo: '',
   })
 
   // Check authentication status
@@ -131,6 +132,7 @@ export default function TeamDetailPage() {
         preferredRole: applicationData.role,
         experience: applicationData.experience,
         message: applicationData.message,
+        contactInfo: applicationData.contactInfo,
       })
 
       if (result.success) {
@@ -138,7 +140,7 @@ export default function TeamDetailPage() {
         setTimeout(() => {
           setIsApplyDialogOpen(false)
           setIsSubmitted(false)
-          setApplicationData({ role: '', experience: '', message: '' })
+          setApplicationData({ role: '', experience: '', message: '', contactInfo: '' })
         }, 2000)
       } else {
         setSubmitError(result.error || 'Failed to submit application')
@@ -466,7 +468,32 @@ export default function TeamDetailPage() {
                         />
                       </div>
 
-                      <Button type="submit" className="w-full gap-2" disabled={isSubmitting}>
+                      <div className="space-y-2">
+                        <Label htmlFor="contactInfo">Phone Number</Label>
+                        <Input
+                          id="contactInfo"
+                          type="tel"
+                          placeholder="e.g., 9876543210"
+                          value={applicationData.contactInfo}
+                          onChange={(e) => {
+                            // Only allow digits
+                            const val = e.target.value.replace(/\D/g, '').slice(0, 10)
+                            setApplicationData({ ...applicationData, contactInfo: val })
+                          }}
+                          pattern="[1-9][0-9]{9}"
+                          title="Phone number must be 10 digits and cannot start with 0"
+                          maxLength={10}
+                          required
+                        />
+                        {applicationData.contactInfo.length > 0 && applicationData.contactInfo.length < 10 && (
+                          <p className="text-xs text-amber-400">Must be exactly 10 digits ({applicationData.contactInfo.length}/10)</p>
+                        )}
+                        {applicationData.contactInfo.startsWith('0') && (
+                          <p className="text-xs text-red-400">Phone number cannot start with 0</p>
+                        )}
+                      </div>
+
+                      <Button type="submit" className="w-full gap-2" disabled={isSubmitting || applicationData.contactInfo.length !== 10 || applicationData.contactInfo.startsWith('0')}>
                         {isSubmitting ? (
                           <>
                             <Loader2 className="h-4 w-4 animate-spin" />
