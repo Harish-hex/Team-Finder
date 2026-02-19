@@ -1,12 +1,14 @@
-import React from 'react';
+'use client'
+
+import React from 'react'
 
 type AuthCardProps = {
-    title: string;
-    subtitle?: string;
-    children: React.ReactNode;
-};
+    title: string
+    subtitle?: string
+    children: React.ReactNode
+}
 
-export const AuthCard = ({ title, subtitle, children }: AuthCardProps) => {
+export function AuthCard({ title, subtitle, children }: AuthCardProps) {
     return (
         <div className="min-h-screen flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8" style={{ backgroundColor: '#0a0f1a' }}>
             {/* Background effects matching landing page */}
@@ -25,5 +27,5 @@ export const AuthCard = ({ title, subtitle, children }: AuthCardProps) => {
                 </div>
             </div>
         </div>
-    );
-};
+    )
+}

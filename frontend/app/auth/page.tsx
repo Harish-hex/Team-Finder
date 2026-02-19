@@ -7,8 +7,7 @@ export default function AuthRedirect() {
     const router = useRouter()
 
     useEffect(() => {
-        // Redirect to Vite frontend for authentication
-        window.location.href = 'http://localhost:5173'
+        router.replace('/auth/login')
     }, [router])
 
     return (

@@ -87,11 +87,22 @@ export const DatabaseService = {
         teamSize: number
         isBeginnerFriendly: boolean
         hasMentor: boolean
+        groupLink?: string
     }): Promise<{ success: boolean; teamId?: string; inviteCode?: string; error?: string }> {
         // Get current user
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) {
             return { success: false, error: 'Not authenticated' }
+        }
+
+        // Rate limit: max 3 active teams per user
+        const { count, error: countError } = await supabase
+            .from('teams')
+            .select('*', { count: 'exact', head: true })
+            .eq('created_by', user.id)
+
+        if (!countError && (count ?? 0) >= 3) {
+            return { success: false, error: 'You can create a maximum of 3 teams. Delete an existing team to create a new one.' }
         }
 
         // Generate invite code
@@ -114,6 +125,7 @@ export const DatabaseService = {
                 is_beginner_friendly: teamData.isBeginnerFriendly,
                 has_mentor: teamData.hasMentor,
                 invite_code: inviteCode,
+                group_link: teamData.groupLink || null,
                 created_by: user.id
             })
             .select()
@@ -173,7 +185,24 @@ export const DatabaseService = {
             return []
         }
 
-        return data || []
+        if (!data || data.length === 0) return []
+
+        // Fetch member counts for all teams
+        const teamIds = data.map(t => t.id)
+        const { data: members } = await supabase
+            .from('team_members')
+            .select('team_id')
+            .in('team_id', teamIds)
+
+        const countMap: Record<string, number> = {}
+        members?.forEach(m => {
+            countMap[m.team_id] = (countMap[m.team_id] || 0) + 1
+        })
+
+        return data.map(team => ({
+            ...team,
+            member_count: countMap[team.id] || 1
+        }))
     },
 
     /**
@@ -295,6 +324,8 @@ export const DatabaseService = {
                 display_name: app.user_name || 'Unknown User',
                 university: app.user_university || 'Unknown',
                 experience_level: app.user_experience_level,
+                avatar_url: app.user_avatar_url || '',
+                interests: app.user_interests || [],
                 contact_info: app.contact_info || ''
             }))
         }

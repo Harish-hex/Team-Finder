@@ -1,8 +1,10 @@
-type DividerProps = {
-    text?: string;
-};
+'use client'
 
-export const Divider = ({ text }: DividerProps) => {
+type DividerProps = {
+    text?: string
+}
+
+export function Divider({ text }: DividerProps) {
     return (
         <div className="relative">
             <div className="absolute inset-0 flex items-center" aria-hidden="true">
@@ -14,5 +16,5 @@ export const Divider = ({ text }: DividerProps) => {
                 </div>
             )}
         </div>
-    );
-};
+    )
+}

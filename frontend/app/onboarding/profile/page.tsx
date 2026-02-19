@@ -38,7 +38,6 @@ export default function MobileOnboardingPage() {
 
     useEffect(() => {
         const handleUserFound = async (user: { id: string; email?: string | null }) => {
-            console.log('✅ User found:', user.email, 'ID:', user.id)
             setEmail(user.email || null)
             setUserId(user.id)
             setAuthLoading(false)
@@ -50,10 +49,7 @@ export default function MobileOnboardingPage() {
                 .eq('user_id', user.id)
                 .single()
 
-            console.log('🔍 Profile check:', { existingProfile, error })
-
             if (existingProfile) {
-                console.log('✅ Profile already exists, redirecting to landing')
                 toast.success('Profile already exists!')
                 router.push('/')
             }
@@ -63,19 +59,16 @@ export default function MobileOnboardingPage() {
             // First check if we already have a session
             const { data: { session } } = await supabase.auth.getSession()
 
-            console.log('🔍 Initial session check:', session?.user?.id)
 
             if (session?.user) {
                 handleUserFound(session.user)
             } else {
-                console.log('⏳ No immediate session, waiting for auth state change...')
                 setAuthLoading(false)
             }
         }
 
         // Listen for auth changes (e.g., from URL hash)
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-            console.log('🔔 Auth state changed:', event, session?.user?.email)
             if (session?.user) {
                 handleUserFound(session.user)
             }
@@ -99,7 +92,7 @@ export default function MobileOnboardingPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
 
-        console.log('🚀 Form submitted', { userId, email, displayName, university, selectedInterests, experienceLevel, isMentor })
+
 
         if (!userId) {
             console.error('❌ No user ID found')
@@ -118,7 +111,7 @@ export default function MobileOnboardingPage() {
 
         try {
             // Save profile directly using the stored user ID
-            console.log('💾 Saving profile for user:', userId)
+
 
             const { data, error } = await supabase
                 .from('profiles')
@@ -140,7 +133,6 @@ export default function MobileOnboardingPage() {
                 return
             }
 
-            console.log('✅ Profile saved successfully:', data)
             toast.success('Profile created! Welcome aboard.')
             router.push('/')
 
@@ -166,7 +158,7 @@ export default function MobileOnboardingPage() {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-[#0a0f1a] p-4">
                 <p className="text-white text-center">Please log in to create your profile.</p>
-                <Button onClick={() => window.location.href = 'http://localhost:5173'}>
+                <Button onClick={() => window.location.href = '/auth/login'}>
                     Go to Login
                 </Button>
             </div>

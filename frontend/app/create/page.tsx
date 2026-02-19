@@ -2,11 +2,11 @@
 
 import React from "react"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Plus, X, Sparkles, GraduationCap, Users, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Plus, X, Sparkles, GraduationCap, Users, CheckCircle, Link2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/select'
 import { Navbar } from '@/components/navbar'
 import { DatabaseService } from '@/lib/database-service'
+import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 
 const eventTypes = [
@@ -38,6 +39,7 @@ export default function CreateTeamPage() {
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
+  const [authChecking, setAuthChecking] = useState(true)
   const [formData, setFormData] = useState({
     eventName: '',
     description: '',
@@ -47,9 +49,23 @@ export default function CreateTeamPage() {
     teamSize: '4',
     isBeginnerFriendly: false,
     hasMentor: false,
+    groupLink: '',
   })
   const [newTech, setNewTech] = useState('')
   const [newRole, setNewRole] = useState('')
+
+  // Auth guard
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        router.push('/auth')
+        return
+      }
+      setAuthChecking(false)
+    }
+    checkAuth()
+  }, [router])
 
   const handleAddTech = (tech: string) => {
     if (tech && !formData.techStack.includes(tech)) {
@@ -87,7 +103,8 @@ export default function CreateTeamPage() {
         rolesNeeded: formData.rolesNeeded,
         teamSize: parseInt(formData.teamSize),
         isBeginnerFriendly: formData.isBeginnerFriendly,
-        hasMentor: formData.hasMentor
+        hasMentor: formData.hasMentor,
+        groupLink: formData.groupLink || undefined,
       })
 
       if (result.success) {
@@ -106,6 +123,18 @@ export default function CreateTeamPage() {
       toast.error('Failed to create team')
       setIsSubmitting(false)
     }
+  }
+
+  if (authChecking) {
+    return (
+      <div className="relative min-h-screen">
+        <div className="fixed inset-0 -z-10 bg-gradient-to-b from-[#0a0f1a] via-[#0d1525] to-[#0a1018]" />
+        <Navbar />
+        <main className="relative flex min-h-screen items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+        </main>
+      </div>
+    )
   }
 
   if (isSuccess) {
@@ -396,6 +425,22 @@ export default function CreateTeamPage() {
                       setFormData({ ...formData, hasMentor: checked })
                     }
                   />
+                </div>
+
+                {/* Group Chat Link */}
+                <div className="flex items-start gap-3 rounded-lg border border-border bg-secondary/30 p-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10">
+                    <Link2 className="h-5 w-5 text-indigo-400" />
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <p className="font-medium text-foreground">Group Chat Link</p>
+                    <p className="text-sm text-muted-foreground">WhatsApp, Discord, or Slack — visible only to accepted members</p>
+                    <Input
+                      placeholder="https://chat.whatsapp.com/... or https://discord.gg/..."
+                      value={formData.groupLink}
+                      onChange={(e) => setFormData({ ...formData, groupLink: e.target.value })}
+                    />
+                  </div>
                 </div>
               </div>
             </div>

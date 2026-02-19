@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button'
 import { Navbar } from '@/components/navbar'
 import { supabase, Team } from '@/lib/supabase'
 import { DatabaseService } from '@/lib/database-service'
+import { EditProfileDialog } from '@/components/edit-profile-dialog'
 import {
   Dialog,
   DialogContent,
@@ -54,6 +55,7 @@ interface ProfileData {
   interests: string[]
   experience_level: 'Beginner' | 'Intermediate' | 'Advanced'
   is_mentor: boolean
+  avatar_url?: string
   created_at: string
 }
 
@@ -72,6 +74,8 @@ interface ApplicationData {
   display_name?: string
   university?: string
   experience_level?: string
+  avatar_url?: string
+  interests?: string[]
   contact_info?: string
 }
 
@@ -107,6 +111,7 @@ export default function ProfilePage() {
   const [applications, setApplications] = useState<ApplicationData[]>([])
   const [loadingApplications, setLoadingApplications] = useState(false)
   const [processingApplicationId, setProcessingApplicationId] = useState<string | null>(null)
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false)
 
   const fetchData = async () => {
     try {
@@ -288,7 +293,7 @@ export default function ProfilePage() {
                 {/* Avatar */}
                 <Avatar className="h-24 w-24 border-4 border-background shadow-xl shadow-violet-500/10">
                   <AvatarImage
-                    src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.display_name}`}
+                    src={profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.display_name}`}
                     alt={profile.display_name}
                   />
                   <AvatarFallback className="bg-violet-500 text-2xl text-violet-50">
@@ -323,15 +328,21 @@ export default function ProfilePage() {
                 </div>
 
                 {/* Edit Button */}
-                <Link href="/onboarding/profile">
-                  <Button variant="outline" className="gap-2 bg-transparent">
-                    <Edit2 className="h-4 w-4" />
-                    Edit Profile
-                  </Button>
-                </Link>
+                <Button variant="outline" className="gap-2 bg-transparent" onClick={() => setIsEditProfileOpen(true)}>
+                  <Edit2 className="h-4 w-4" />
+                  Edit Profile
+                </Button>
               </div>
             </div>
           </motion.div>
+
+          {/* Edit Profile Dialog */}
+          <EditProfileDialog
+            profile={profile}
+            open={isEditProfileOpen}
+            onOpenChange={setIsEditProfileOpen}
+            onSaved={fetchData}
+          />
 
           {/* Interests Section */}
           <motion.div variants={item} className="rounded-xl border border-border bg-card p-6">
@@ -403,7 +414,7 @@ export default function ProfilePage() {
                               )}
                             </Button>
                           </DialogTrigger>
-                          <DialogContent className="max-w-lg">
+                          <DialogContent className="max-w-2xl">
                             <DialogHeader>
                               <DialogTitle>Applications for {team.name}</DialogTitle>
                               <DialogDescription>
@@ -415,38 +426,91 @@ export default function ProfilePage() {
                               <div className="flex items-center justify-center py-8">
                                 <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
                               </div>
-                            ) : applications.length > 0 ? (
-                              <div className="max-h-96 space-y-4 overflow-y-auto">
+                            ) : applications.filter(a => a.status === 'pending').length > 0 ? (
+                              <div className="max-h-[70vh] space-y-5 overflow-y-auto pr-1">
                                 {applications.filter(a => a.status === 'pending').map((app) => (
-                                  <div key={app.id} className="rounded-lg border border-border bg-secondary/30 p-4">
-                                    <div className="flex items-start justify-between">
-                                      <div>
-                                        <p className="font-medium text-foreground">
-                                          {app.display_name || 'Unknown User'}
-                                        </p>
+                                  <div key={app.id} className="rounded-xl border border-border bg-secondary/20 p-5 space-y-4">
+                                    {/* Applicant Header */}
+                                    <div className="flex items-start gap-4">
+                                      <Avatar className="h-14 w-14 border-2 border-border shrink-0">
+                                        <AvatarImage
+                                          src={app.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${app.display_name}`}
+                                          alt={app.display_name || 'Applicant'}
+                                        />
+                                        <AvatarFallback className="bg-violet-500 text-violet-50 text-lg">
+                                          {app.display_name?.charAt(0) || 'U'}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <h3 className="text-base font-semibold text-foreground">
+                                            {app.display_name || 'Unknown User'}
+                                          </h3>
+                                          {app.experience_level && (
+                                            <Badge
+                                              variant="outline"
+                                              className={experienceLevelColors[app.experience_level] || 'bg-gray-500/20 text-gray-400 border-gray-500/30'}
+                                            >
+                                              {app.experience_level}
+                                            </Badge>
+                                          )}
+                                        </div>
                                         <p className="text-sm text-muted-foreground">
                                           {app.university || 'Unknown University'}
                                         </p>
+                                        <p className="text-xs text-muted-foreground mt-0.5">
+                                          Applied {new Date(app.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                        </p>
                                       </div>
-                                      <Badge variant="outline" className="text-xs">
-                                        {app.preferred_role}
-                                      </Badge>
                                     </div>
-                                    <p className="mt-2 text-sm text-muted-foreground">
-                                      <strong>Experience:</strong> {app.experience}
-                                    </p>
-                                    {app.contact_info && (
-                                      <p className="mt-1 text-sm text-muted-foreground">
-                                        <strong>Phone:</strong> {app.contact_info}
-                                      </p>
+
+                                    {/* Interests */}
+                                    {app.interests && app.interests.length > 0 && (
+                                      <div>
+                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5">Interests</p>
+                                        <div className="flex flex-wrap gap-1.5">
+                                          {app.interests.map((interest: string) => (
+                                            <span key={interest} className="rounded-md bg-secondary px-2 py-0.5 text-xs text-secondary-foreground">
+                                              {interest}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      </div>
                                     )}
-                                    <p className="mt-1 text-sm text-foreground">
-                                      {app.message}
-                                    </p>
-                                    <div className="mt-4 flex gap-2">
+
+                                    {/* Application Details */}
+                                    <div className="grid gap-3 sm:grid-cols-2">
+                                      <div className="rounded-lg bg-secondary/40 p-3">
+                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Preferred Role</p>
+                                        <p className="text-sm font-medium text-foreground">{app.preferred_role}</p>
+                                      </div>
+                                      <div className="rounded-lg bg-secondary/40 p-3">
+                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Experience</p>
+                                        <p className="text-sm text-foreground">{app.experience}</p>
+                                      </div>
+                                    </div>
+
+                                    {/* Message */}
+                                    <div>
+                                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Why they want to join</p>
+                                      <p className="text-sm text-foreground leading-relaxed bg-secondary/30 rounded-lg p-3">
+                                        {app.message}
+                                      </p>
+                                    </div>
+
+                                    {/* Contact */}
+                                    {app.contact_info && (
+                                      <div className="rounded-lg bg-secondary/40 p-3">
+                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Phone Number</p>
+                                        <p className="text-sm font-medium text-foreground">{app.contact_info}</p>
+                                      </div>
+                                    )}
+
+                                    {/* Actions */}
+                                    <div className="flex gap-3 pt-1">
                                       <Button
                                         size="sm"
-                                        className="gap-1 bg-emerald-600 hover:bg-emerald-700"
+                                        className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 flex-1 sm:flex-none"
                                         disabled={processingApplicationId === app.id}
                                         onClick={() => handleApproveApplication(app.id)}
                                       >
@@ -460,7 +524,7 @@ export default function ProfilePage() {
                                       <Button
                                         size="sm"
                                         variant="outline"
-                                        className="gap-1 border-red-500/30 text-red-400 hover:bg-red-500/10"
+                                        className="gap-1.5 border-red-500/30 text-red-400 hover:bg-red-500/10 flex-1 sm:flex-none"
                                         disabled={processingApplicationId === app.id}
                                         onClick={() => handleRejectApplication(app.id)}
                                       >

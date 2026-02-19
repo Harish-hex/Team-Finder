@@ -35,8 +35,7 @@ const eventTypeColors: Record<string, string> = {
 }
 
 export function TeamCard({ team }: TeamCardProps) {
-  // Since we don't have members count from DB yet, show placeholder
-  const currentMembersCount = 1 // At least the creator
+  const currentMembersCount = (team as any).member_count ?? 1
   const slotsRemaining = team.max_members - currentMembersCount
   const slotPercentage = (currentMembersCount / team.max_members) * 100
   const timeAgo = getTimeAgo(team.created_at)

@@ -1,10 +1,12 @@
-type OAuthButtonProps = {
-    provider: 'google';
-    onClick: () => void;
-    isLoading?: boolean;
-};
+'use client'
 
-export const OAuthButton = ({ provider: _provider, onClick, isLoading }: OAuthButtonProps) => {
+type OAuthButtonProps = {
+    provider: 'google'
+    onClick: () => void
+    isLoading?: boolean
+}
+
+export function OAuthButton({ provider: _provider, onClick, isLoading }: OAuthButtonProps) {
     return (
         <button
             onClick={onClick}
@@ -23,5 +25,5 @@ export const OAuthButton = ({ provider: _provider, onClick, isLoading }: OAuthBu
             )}
             <span className="text-sm font-medium leading-6">Continue with Google</span>
         </button>
-    );
-};
+    )
+}

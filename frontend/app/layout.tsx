@@ -10,7 +10,7 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'Fireteam | Find Your Squad',
+  title: 'TeamFinder | Find Your Squad',
   description: 'College-only tech team finder for hackathons, coding competitions, CTFs, and tech events. Form your squad, find mentors, and compete together.',
   generator: 'v0.app',
   icons: {

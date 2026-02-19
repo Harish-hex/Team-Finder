@@ -158,7 +158,7 @@ export default function LandingPage() {
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/80">
                 <Users className="h-3.5 w-3.5 text-white" />
               </div>
-              <span className="font-semibold text-white/90">Fireteam</span>
+              <span className="font-semibold text-white/90">TeamFinder</span>
             </div>
             <p className="text-sm text-blue-100/40">
               College-only tech team finder. Find your squad, win together.

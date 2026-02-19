@@ -26,6 +26,7 @@ export interface Profile {
     interests: string[]
     experience_level: 'Beginner' | 'Intermediate' | 'Advanced'
     is_mentor: boolean
+    avatar_url?: string
     created_at: string
     updated_at: string
 }
@@ -41,6 +42,7 @@ export interface Team {
     is_beginner_friendly: boolean
     has_mentor: boolean
     invite_code: string
+    group_link?: string
     created_by: string
     created_at: string
     updated_at: string

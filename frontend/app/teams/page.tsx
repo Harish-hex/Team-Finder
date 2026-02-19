@@ -17,7 +17,6 @@ import {
 } from '@/components/ui/select'
 import { Navbar } from '@/components/navbar'
 import { TeamCard } from '@/components/team-card'
-import { mockTeams } from '@/lib/mock-data'
 import { DatabaseService } from '@/lib/database-service'
 
 const eventTypes = ['all', 'hackathon', 'ctf', 'competition', 'project'] as const

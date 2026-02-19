@@ -1,12 +1,13 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Users, Plus, Search, User, Menu, X } from 'lucide-react'
+import { Users, Plus, Search, User, Menu, X, LogOut } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { supabase } from '@/lib/supabase'
 
 const navItems = [
   { href: '/teams', label: 'Browse Teams', icon: Search },
@@ -16,7 +17,13 @@ const navItems = [
 
 export function Navbar() {
   const pathname = usePathname()
+  const router = useRouter()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    router.push('/auth/login')
+  }
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-[#0a0f1a]/80 backdrop-blur-lg">
@@ -26,7 +33,7 @@ export function Navbar() {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/80">
             <Users className="h-4 w-4 text-white" />
           </div>
-          <span className="text-lg font-bold text-white/90">Fireteam</span>
+          <span className="text-lg font-bold text-white/90">TeamFinder</span>
         </Link>
 
         {/* Desktop Navigation */}
@@ -55,6 +62,14 @@ export function Navbar() {
               </Link>
             )
           })}
+          <Button
+            variant="ghost"
+            className="gap-2 text-white/50 hover:text-red-400"
+            onClick={handleSignOut}
+          >
+            <LogOut className="h-4 w-4" />
+            Sign Out
+          </Button>
         </div>
 
         {/* Mobile Menu Button */}
@@ -98,6 +113,14 @@ export function Navbar() {
                 </Link>
               )
             })}
+            <Button
+              variant="ghost"
+              className="w-full justify-start gap-2 text-red-400/70 hover:text-red-400"
+              onClick={() => { setMobileMenuOpen(false); handleSignOut(); }}
+            >
+              <LogOut className="h-4 w-4" />
+              Sign Out
+            </Button>
           </div>
         </motion.div>
       )}

@@ -18,6 +18,7 @@ import {
   Heart,
   Loader2,
   AlertCircle,
+  ExternalLink,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -50,6 +51,7 @@ interface TeamMemberWithProfile {
   display_name: string
   role: string
   experience_level: string
+  avatar_url?: string
 }
 
 export default function TeamDetailPage() {
@@ -66,6 +68,7 @@ export default function TeamDetailPage() {
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [applicationData, setApplicationData] = useState({
     role: '',
     experience: '',
@@ -78,12 +81,14 @@ export default function TeamDetailPage() {
     const checkAuth = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       setIsAuthenticated(!!user)
+      setCurrentUserId(user?.id || null)
     }
     checkAuth()
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setIsAuthenticated(!!session?.user)
+      setCurrentUserId(session?.user?.id || null)
     })
 
     return () => subscription.unsubscribe()
@@ -357,6 +362,10 @@ export default function TeamDetailPage() {
                   className="flex items-center gap-3 rounded-lg border border-border bg-secondary/30 p-4"
                 >
                   <Avatar className="h-12 w-12 border-2 border-border">
+                    <AvatarImage
+                      src={member.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${member.display_name}`}
+                      alt={member.display_name || 'Member'}
+                    />
                     <AvatarFallback className="bg-secondary text-sm">
                       {member.display_name?.charAt(0) || 'U'}
                     </AvatarFallback>
@@ -387,6 +396,26 @@ export default function TeamDetailPage() {
               ))}
             </div>
           </div>
+
+          {/* Group Chat Link - Members Only */}
+          {team.group_link && currentUserId && members.some(m => m.user_id === currentUserId) && (
+            <div className="mt-6 rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-6">
+              <div className="flex items-center gap-2 mb-3">
+                <ExternalLink className="h-5 w-5 text-indigo-400" />
+                <h2 className="text-lg font-semibold text-foreground">Team Group Chat</h2>
+              </div>
+              <p className="text-sm text-muted-foreground mb-3">Only visible to team members</p>
+              <a
+                href={team.group_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-lg bg-indigo-500/20 border border-indigo-500/30 px-4 py-2 text-sm font-medium text-indigo-300 hover:bg-indigo-500/30 transition-colors"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Open Group Chat
+              </a>
+            </div>
+          )}
 
           {/* Apply Button */}
           <div className="mt-8 flex justify-center">
