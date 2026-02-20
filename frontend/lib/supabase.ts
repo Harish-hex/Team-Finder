@@ -73,6 +73,12 @@ export interface Event {
     id: string
     title: string
     description: string
+    event_date?: string
+    event_type?: 'hackathon' | 'ctf' | 'competition' | 'workshop' | 'meetup' | 'other'
+    max_members?: number
+    registration_link?: string
+    venue?: string
+    brochure_url?: string
     created_by: string
     created_at: string
 }

@@ -407,6 +407,16 @@ export const DatabaseService = {
     // ============ DASHBOARD OPERATIONS ============
 
     /**
+     * Check if the current user is an admin
+     */
+    async isAdmin(): Promise<boolean> {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return false
+        const adminEmails = ['admin@example.edu', 'harishgovind2007@gmail.com']
+        return adminEmails.includes(user.email || '')
+    },
+
+    /**
      * Get user's current team
      */
     async getMyTeam() {
@@ -427,10 +437,11 @@ export const DatabaseService = {
     /**
      * Get events feed for dashboard
      */
-    async getEvents(limit: number = 10): Promise<Event[]> {
+    async getEvents(limit: number = 20): Promise<Event[]> {
         const { data, error } = await supabase
             .from('events')
             .select('*')
+            .order('event_date', { ascending: true, nullsFirst: false })
             .order('created_at', { ascending: false })
             .limit(limit)
 
@@ -443,11 +454,43 @@ export const DatabaseService = {
     },
 
     /**
+     * Upload event brochure image to Supabase Storage
+     */
+    async uploadBrochure(file: File): Promise<{ url: string | null; error?: string }> {
+        const fileExt = file.name.split('.').pop()
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
+
+        const { error } = await supabase.storage
+            .from('event-brochures')
+            .upload(fileName, file, {
+                cacheControl: '3600',
+                upsert: false
+            })
+
+        if (error) {
+            console.error('Error uploading brochure:', error)
+            return { url: null, error: error.message }
+        }
+
+        const { data: urlData } = supabase.storage
+            .from('event-brochures')
+            .getPublicUrl(fileName)
+
+        return { url: urlData.publicUrl }
+    },
+
+    /**
      * Create event (admin only)
      */
     async createEvent(eventData: {
         title: string
         description: string
+        event_date?: string
+        event_type?: string
+        max_members?: number
+        registration_link?: string
+        venue?: string
+        brochure_url?: string
     }): Promise<{ success: boolean; error?: string }> {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) {
@@ -459,11 +502,55 @@ export const DatabaseService = {
             .insert({
                 title: eventData.title,
                 description: eventData.description,
+                event_date: eventData.event_date || null,
+                event_type: eventData.event_type || null,
+                max_members: eventData.max_members || null,
+                registration_link: eventData.registration_link || null,
+                venue: eventData.venue || null,
+                brochure_url: eventData.brochure_url || null,
                 created_by: user.id
             })
 
         if (error) {
             console.error('Error creating event:', error)
+            return { success: false, error: error.message }
+        }
+
+        return { success: true }
+    },
+
+    /**
+     * Delete event (admin only)
+     */
+    async deleteEvent(eventId: string): Promise<{ success: boolean; error?: string }> {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+            return { success: false, error: 'Not authenticated' }
+        }
+
+        // Get the event to check brochure_url for cleanup
+        const { data: event } = await supabase
+            .from('events')
+            .select('brochure_url')
+            .eq('id', eventId)
+            .single()
+
+        // Delete the brochure from storage if it exists
+        if (event?.brochure_url) {
+            const url = new URL(event.brochure_url)
+            const pathParts = url.pathname.split('/event-brochures/')
+            if (pathParts[1]) {
+                await supabase.storage.from('event-brochures').remove([pathParts[1]])
+            }
+        }
+
+        const { error } = await supabase
+            .from('events')
+            .delete()
+            .eq('id', eventId)
+
+        if (error) {
+            console.error('Error deleting event:', error)
             return { success: false, error: error.message }
         }
 
