@@ -407,6 +407,45 @@ export const DatabaseService = {
     // ============ DASHBOARD OPERATIONS ============
 
     /**
+     * Get a public profile by user_id (for viewing other users)
+     */
+    async getPublicProfile(userId: string): Promise<{
+        profile: Profile | null
+        teams: Team[]
+    }> {
+        // Fetch profile
+        const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('user_id', userId)
+            .single()
+
+        if (profileError) {
+            console.error('Error fetching public profile:', profileError)
+            return { profile: null, teams: [] }
+        }
+
+        // Fetch teams the user is in
+        const { data: memberData } = await supabase
+            .from('team_members')
+            .select('team_id')
+            .eq('user_id', userId)
+
+        let teams: Team[] = []
+        if (memberData && memberData.length > 0) {
+            const teamIds = memberData.map(m => m.team_id)
+            const { data: teamsData } = await supabase
+                .from('teams')
+                .select('*')
+                .in('id', teamIds)
+
+            teams = teamsData || []
+        }
+
+        return { profile: profileData, teams }
+    },
+
+    /**
      * Check if the current user is an admin
      */
     async isAdmin(): Promise<boolean> {

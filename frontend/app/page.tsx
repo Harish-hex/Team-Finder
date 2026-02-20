@@ -15,13 +15,18 @@ import {
   Loader2,
   Upload,
   X,
-  Image as ImageIcon,
   Clock,
   UserCheck,
   Sparkles,
+  Bell,
+  Check,
+  LogOut,
+  AlertCircle,
+  ChevronRight,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Navbar } from '@/components/navbar'
 import { supabase, Team, Event } from '@/lib/supabase'
 import { DatabaseService } from '@/lib/database-service'
@@ -65,6 +70,12 @@ const eventTypeStyles: Record<string, string> = {
   other: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
 }
 
+const experienceLevelColors: Record<string, string> = {
+  Beginner: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+  Intermediate: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+  Advanced: 'bg-violet-500/20 text-violet-400 border-violet-500/30',
+}
+
 interface ProfileData {
   display_name: string
   avatar_url?: string
@@ -72,6 +83,22 @@ interface ProfileData {
 
 interface TeamWithApplications extends Team {
   pending_applications: number
+}
+
+interface ApplicationData {
+  id: string
+  user_id: string
+  preferred_role: string
+  experience: string
+  message: string
+  status: string
+  created_at: string
+  display_name?: string
+  university?: string
+  experience_level?: string
+  avatar_url?: string
+  interests?: string[]
+  contact_info?: string
 }
 
 // ════════════════════════════════════════════════════════
@@ -102,6 +129,13 @@ export default function DashboardPage() {
   const [eventMaxMembers, setEventMaxMembers] = useState('')
   const [eventVenue, setEventVenue] = useState('')
   const [eventRegLink, setEventRegLink] = useState('')
+
+  // Team management state
+  const [deletingTeamId, setDeletingTeamId] = useState<string | null>(null)
+  const [leavingTeamId, setLeavingTeamId] = useState<string | null>(null)
+  const [applications, setApplications] = useState<ApplicationData[]>([])
+  const [loadingApplications, setLoadingApplications] = useState(false)
+  const [processingApplicationId, setProcessingApplicationId] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -193,7 +227,6 @@ export default function DashboardPage() {
     })
 
     if (result.success) {
-      // Reset form
       setEventTitle('')
       setEventDescription('')
       setEventDate('')
@@ -203,7 +236,6 @@ export default function DashboardPage() {
       setEventRegLink('')
       clearBrochure()
       setShowCreateEvent(false)
-      // Refresh events
       const updated = await DatabaseService.getEvents()
       setEvents(updated)
     } else {
@@ -224,6 +256,62 @@ export default function DashboardPage() {
     setDeletingEventId(null)
   }
 
+  // ── Team management handlers ──────────────────────────
+  const handleDeleteTeam = async (teamId: string) => {
+    setDeletingTeamId(teamId)
+    const result = await DatabaseService.deleteTeam(teamId)
+    if (result.success) {
+      setOwnedTeams((prev) => prev.filter((t) => t.id !== teamId))
+    } else {
+      alert(result.error || 'Failed to delete team')
+    }
+    setDeletingTeamId(null)
+  }
+
+  const handleLeaveTeam = async (teamId: string) => {
+    setLeavingTeamId(teamId)
+    const result = await DatabaseService.leaveTeam(teamId)
+    if (result.success) {
+      setJoinedTeams((prev) => prev.filter((t) => t.id !== teamId))
+    } else {
+      alert(result.error || 'Failed to leave team')
+    }
+    setLeavingTeamId(null)
+  }
+
+  const handleViewApplications = async (teamId: string) => {
+    setLoadingApplications(true)
+    const apps = await DatabaseService.getTeamApplications(teamId)
+    setApplications(apps)
+    setLoadingApplications(false)
+  }
+
+  const handleApproveApplication = async (applicationId: string) => {
+    setProcessingApplicationId(applicationId)
+    const result = await DatabaseService.approveApplication(applicationId)
+    if (result.success) {
+      setApplications((prev) => prev.filter((a) => a.id !== applicationId))
+      const teamsWithApps = await DatabaseService.getMyTeamsWithApplications()
+      setOwnedTeams(teamsWithApps)
+    } else {
+      alert(result.error || 'Failed to approve application')
+    }
+    setProcessingApplicationId(null)
+  }
+
+  const handleRejectApplication = async (applicationId: string) => {
+    setProcessingApplicationId(applicationId)
+    const result = await DatabaseService.rejectApplication(applicationId)
+    if (result.success) {
+      setApplications((prev) => prev.filter((a) => a.id !== applicationId))
+      const teamsWithApps = await DatabaseService.getMyTeamsWithApplications()
+      setOwnedTeams(teamsWithApps)
+    } else {
+      alert(result.error || 'Failed to reject application')
+    }
+    setProcessingApplicationId(null)
+  }
+
   // ── Loading / Redirecting ─────────────────────────────
   if (loading || redirecting) {
     return (
@@ -236,11 +324,6 @@ export default function DashboardPage() {
       </div>
     )
   }
-
-  const allTeams = [
-    ...ownedTeams.map((t) => ({ ...t, owned: true })),
-    ...joinedTeams.map((t) => ({ ...t, owned: false })),
-  ]
 
   // ════════════════════════════════════════════════════════
   return (
@@ -295,43 +378,318 @@ export default function DashboardPage() {
               <Users className="h-5 w-5 text-indigo-400" />
               <h2 className="text-lg font-semibold text-white/90">My Teams</h2>
               <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-xs font-medium text-indigo-300">
-                {allTeams.length}
+                {ownedTeams.length + joinedTeams.length}
               </span>
             </div>
 
-            {allTeams.length > 0 ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {allTeams.map((team) => (
-                  <Link key={team.id} href={`/teams/${team.id}`}>
-                    <div className="group rounded-xl border border-white/10 bg-[#0d1320]/60 p-4 backdrop-blur-sm transition-all hover:border-indigo-500/30 hover:bg-indigo-500/5">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-medium text-white/90 transition-colors group-hover:text-indigo-300">
-                            {team.name}
-                          </p>
-                          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-blue-100/40">
-                            <Badge variant="outline" className="border-white/10 bg-white/5 text-blue-100/50 text-xs">
-                              {team.event_type}
-                            </Badge>
-                            <span>Max {team.max_members}</span>
-                          </div>
+            {/* Owned Teams */}
+            {ownedTeams.length > 0 && (
+              <div className="space-y-3 mb-4">
+                {ownedTeams.map((team) => (
+                  <div
+                    key={team.id}
+                    className="group rounded-xl border border-white/10 bg-[#0d1320]/60 p-4 backdrop-blur-sm transition-all hover:border-violet-500/20"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <Link href={`/teams/${team.id}`} className="min-w-0 flex-1">
+                        <p className="truncate font-medium text-white/90 transition-colors group-hover:text-violet-300">
+                          {team.name}
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-blue-100/40">
+                          <Badge variant="outline" className="border-white/10 bg-white/5 text-blue-100/50 text-xs capitalize">
+                            {team.event_type}
+                          </Badge>
+                          <span>Max {team.max_members}</span>
                         </div>
-                        <Badge
-                          variant="outline"
-                          className={
-                            (team as any).owned
-                              ? 'border-violet-500/30 bg-violet-500/10 text-violet-300 text-xs'
-                              : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300 text-xs'
-                          }
-                        >
-                          {(team as any).owned ? 'Owner' : 'Member'}
+                      </Link>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge variant="outline" className="border-violet-500/30 bg-violet-500/10 text-violet-300 text-xs">
+                          Owner
                         </Badge>
+
+                        {/* Applications Button */}
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="relative gap-1 border-white/10 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white"
+                              onClick={() => handleViewApplications(team.id)}
+                            >
+                              <Bell className="h-3.5 w-3.5" />
+                              <span className="hidden sm:inline">Apps</span>
+                              {team.pending_applications > 0 && (
+                                <span className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] text-white">
+                                  {team.pending_applications}
+                                </span>
+                              )}
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-2xl">
+                            <DialogHeader>
+                              <DialogTitle>Applications for {team.name}</DialogTitle>
+                              <DialogDescription>Review and manage team join requests</DialogDescription>
+                            </DialogHeader>
+
+                            {loadingApplications ? (
+                              <div className="flex items-center justify-center py-8">
+                                <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
+                              </div>
+                            ) : applications.filter((a) => a.status === 'pending').length > 0 ? (
+                              <div className="max-h-[70vh] space-y-5 overflow-y-auto pr-1">
+                                {applications
+                                  .filter((a) => a.status === 'pending')
+                                  .map((app) => (
+                                    <div key={app.id} className="rounded-xl border border-border bg-secondary/20 p-5 space-y-4">
+                                      {/* Applicant Header */}
+                                      <div className="flex items-start gap-4">
+                                        <Link href={`/profile/${app.user_id}`}>
+                                          <Avatar className="h-14 w-14 border-2 border-border shrink-0 cursor-pointer hover:border-violet-500/50 transition-colors">
+                                            <AvatarImage
+                                              src={
+                                                app.avatar_url ||
+                                                `https://api.dicebear.com/7.x/avataaars/svg?seed=${app.display_name}`
+                                              }
+                                              alt={app.display_name || 'Applicant'}
+                                            />
+                                            <AvatarFallback className="bg-violet-500 text-violet-50 text-lg">
+                                              {app.display_name?.charAt(0) || 'U'}
+                                            </AvatarFallback>
+                                          </Avatar>
+                                        </Link>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <Link href={`/profile/${app.user_id}`}>
+                                              <h3 className="text-base font-semibold text-foreground hover:text-violet-300 transition-colors">
+                                                {app.display_name || 'Unknown User'}
+                                              </h3>
+                                            </Link>
+                                            {app.experience_level && (
+                                              <Badge
+                                                variant="outline"
+                                                className={
+                                                  experienceLevelColors[app.experience_level] ||
+                                                  'bg-gray-500/20 text-gray-400 border-gray-500/30'
+                                                }
+                                              >
+                                                {app.experience_level}
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          <p className="text-sm text-muted-foreground">
+                                            {app.university || 'Unknown University'}
+                                          </p>
+                                          <p className="text-xs text-muted-foreground mt-0.5">
+                                            Applied{' '}
+                                            {new Date(app.created_at).toLocaleDateString('en-US', {
+                                              month: 'short',
+                                              day: 'numeric',
+                                            })}
+                                          </p>
+                                        </div>
+                                      </div>
+
+                                      {/* Interests */}
+                                      {app.interests && app.interests.length > 0 && (
+                                        <div>
+                                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
+                                            Interests
+                                          </p>
+                                          <div className="flex flex-wrap gap-1.5">
+                                            {app.interests.map((interest: string) => (
+                                              <span
+                                                key={interest}
+                                                className="rounded-md bg-secondary px-2 py-0.5 text-xs text-secondary-foreground"
+                                              >
+                                                {interest}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Application Details */}
+                                      <div className="grid gap-3 sm:grid-cols-2">
+                                        <div className="rounded-lg bg-secondary/40 p-3">
+                                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                                            Preferred Role
+                                          </p>
+                                          <p className="text-sm font-medium text-foreground">{app.preferred_role}</p>
+                                        </div>
+                                        <div className="rounded-lg bg-secondary/40 p-3">
+                                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                                            Experience
+                                          </p>
+                                          <p className="text-sm text-foreground">{app.experience}</p>
+                                        </div>
+                                      </div>
+
+                                      {/* Message */}
+                                      <div>
+                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                                          Why they want to join
+                                        </p>
+                                        <p className="text-sm text-foreground leading-relaxed bg-secondary/30 rounded-lg p-3">
+                                          {app.message}
+                                        </p>
+                                      </div>
+
+                                      {/* Contact */}
+                                      {app.contact_info && (
+                                        <div className="rounded-lg bg-secondary/40 p-3">
+                                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                                            Phone Number
+                                          </p>
+                                          <p className="text-sm font-medium text-foreground">{app.contact_info}</p>
+                                        </div>
+                                      )}
+
+                                      {/* Actions */}
+                                      <div className="flex gap-3 pt-1">
+                                        <Button
+                                          size="sm"
+                                          className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 flex-1 sm:flex-none"
+                                          disabled={processingApplicationId === app.id}
+                                          onClick={() => handleApproveApplication(app.id)}
+                                        >
+                                          {processingApplicationId === app.id ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                          ) : (
+                                            <Check className="h-4 w-4" />
+                                          )}
+                                          Approve
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="gap-1.5 border-red-500/30 text-red-400 hover:bg-red-500/10 flex-1 sm:flex-none"
+                                          disabled={processingApplicationId === app.id}
+                                          onClick={() => handleRejectApplication(app.id)}
+                                        >
+                                          <X className="h-4 w-4" />
+                                          Reject
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ))}
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center py-8 text-center">
+                                <AlertCircle className="h-8 w-8 text-muted-foreground mb-2" />
+                                <p className="text-muted-foreground">No pending applications</p>
+                              </div>
+                            )}
+                          </DialogContent>
+                        </Dialog>
+
+                        {/* Delete Team Button */}
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1 border-red-500/30 text-red-400 hover:bg-red-500/10 h-8 w-8 p-0"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete Team</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Are you sure you want to delete &quot;{team.name}&quot;? This action cannot be undone. All team
+                                members will be removed and pending applications will be deleted.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                className="bg-red-600 hover:bg-red-700"
+                                onClick={() => handleDeleteTeam(team.id)}
+                                disabled={deletingTeamId === team.id}
+                              >
+                                {deletingTeamId === team.id && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                                Delete Team
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     </div>
-                  </Link>
+                  </div>
                 ))}
               </div>
-            ) : (
+            )}
+
+            {/* Joined Teams */}
+            {joinedTeams.length > 0 && (
+              <div className="space-y-3">
+                {joinedTeams.map((team) => (
+                  <div
+                    key={team.id}
+                    className="group rounded-xl border border-white/10 bg-[#0d1320]/60 p-4 backdrop-blur-sm transition-all hover:border-cyan-500/20"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <Link href={`/teams/${team.id}`} className="min-w-0 flex-1">
+                        <p className="truncate font-medium text-white/90 transition-colors group-hover:text-cyan-300">
+                          {team.name}
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-blue-100/40">
+                          <Badge variant="outline" className="border-white/10 bg-white/5 text-blue-100/50 text-xs capitalize">
+                            {team.event_type}
+                          </Badge>
+                          <span>Max {team.max_members}</span>
+                        </div>
+                      </Link>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge variant="outline" className="border-cyan-500/30 bg-cyan-500/10 text-cyan-300 text-xs">
+                          Member
+                        </Badge>
+
+                        {/* Leave Team Button */}
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1 border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                            >
+                              <LogOut className="h-3.5 w-3.5" />
+                              <span className="hidden sm:inline">Leave</span>
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Leave Team</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Are you sure you want to leave &quot;{team.name}&quot;? You will need to apply again if you want to
+                                rejoin.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                className="bg-amber-600 hover:bg-amber-700"
+                                onClick={() => handleLeaveTeam(team.id)}
+                                disabled={leavingTeamId === team.id}
+                              >
+                                {leavingTeamId === team.id && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                                Leave Team
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Empty state */}
+            {ownedTeams.length === 0 && joinedTeams.length === 0 && (
               <div className="rounded-xl border border-dashed border-white/10 bg-[#0d1320]/40 p-8 text-center backdrop-blur-sm">
                 <Users className="mx-auto h-10 w-10 text-blue-100/20" />
                 <p className="mt-3 text-blue-100/40">You haven&apos;t joined any teams yet.</p>
@@ -598,9 +956,7 @@ export default function DashboardPage() {
                                     onClick={() => handleDeleteEvent(event.id)}
                                     disabled={deletingEventId === event.id}
                                   >
-                                    {deletingEventId === event.id && (
-                                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    )}
+                                    {deletingEventId === event.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                     Delete
                                   </AlertDialogAction>
                                 </AlertDialogFooter>
@@ -641,11 +997,7 @@ export default function DashboardPage() {
                         {/* Registration link */}
                         {event.registration_link && (
                           <div className="mt-3">
-                            <a
-                              href={event.registration_link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
+                            <a href={event.registration_link} target="_blank" rel="noopener noreferrer">
                               <Button
                                 size="sm"
                                 variant="outline"

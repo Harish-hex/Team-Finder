@@ -357,26 +357,27 @@ export default function TeamDetailPage() {
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {members.map((member) => (
-                <div
-                  key={member.user_id}
-                  className="flex items-center gap-3 rounded-lg border border-border bg-secondary/30 p-4"
-                >
-                  <Avatar className="h-12 w-12 border-2 border-border">
-                    <AvatarImage
-                      src={member.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${member.display_name}`}
-                      alt={member.display_name || 'Member'}
-                    />
-                    <AvatarFallback className="bg-secondary text-sm">
-                      {member.display_name?.charAt(0) || 'U'}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="font-medium text-foreground">{member.display_name || 'Unknown'}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {member.role === 'admin' ? 'Team Lead' : 'Member'}
-                    </p>
+                <Link key={member.user_id} href={`/profile/${member.user_id}`}>
+                  <div
+                    className="flex items-center gap-3 rounded-lg border border-border bg-secondary/30 p-4 transition-all hover:border-violet-500/30 hover:bg-violet-500/5 cursor-pointer"
+                  >
+                    <Avatar className="h-12 w-12 border-2 border-border">
+                      <AvatarImage
+                        src={member.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${member.display_name}`}
+                        alt={member.display_name || 'Member'}
+                      />
+                      <AvatarFallback className="bg-secondary text-sm">
+                        {member.display_name?.charAt(0) || 'U'}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-medium text-foreground transition-colors hover:text-violet-300">{member.display_name || 'Unknown'}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {member.role === 'admin' ? 'Team Lead' : 'Member'}
+                      </p>
+                    </div>
                   </div>
-                </div>
+                </Link>
               ))}
 
               {/* Empty slots */}
