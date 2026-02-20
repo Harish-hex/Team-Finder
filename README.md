@@ -1,6 +1,6 @@
 <div align="center">
   
-# 🤝 TeamFinder
+# CoForge
 
 **A modern, intuitive web application for finding teams and like-minded peers for your activities and projects.**
 
