@@ -1,6 +1,6 @@
-# TeamFinder Backend - Supabase Setup
+# CoForge Backend - Supabase Setup
 
-This directory contains SQL migrations for the TeamFinder backend database.
+This directory contains SQL migrations for the CoForge backend database.
 
 ## Database Schema
 

@@ -13,7 +13,7 @@ export interface UserProfile {
 }
 
 /**
- * Database service for TeamFinder
+ * Database service for CoForge
  * Replaces the mock AuthService with real Supabase operations
  */
 export const DatabaseService = {

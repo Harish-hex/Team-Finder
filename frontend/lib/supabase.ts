@@ -10,7 +10,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
         storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-        storageKey: 'teamfinder-auth',
+        storageKey: 'coforge-auth',
         autoRefreshToken: true,
         persistSession: true,
         detectSessionInUrl: true

@@ -49,7 +49,7 @@ export default function SignupPage() {
     }
 
     return (
-        <AuthCard title="Create an account" subtitle="Join TeamFinder today">
+        <AuthCard title="Create an account" subtitle="Join CoForge today">
             <form className="space-y-6" onSubmit={handleEmailSignup}>
                 <div>
                     <label htmlFor="email" className="block text-sm font-medium leading-6 text-white/90">
