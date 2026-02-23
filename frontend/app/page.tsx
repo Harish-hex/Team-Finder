@@ -136,6 +136,7 @@ export default function DashboardPage() {
   const [applications, setApplications] = useState<ApplicationData[]>([])
   const [loadingApplications, setLoadingApplications] = useState(false)
   const [processingApplicationId, setProcessingApplicationId] = useState<string | null>(null)
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -896,7 +897,8 @@ export default function DashboardPage() {
                 {events.map((event) => (
                   <div
                     key={event.id}
-                    className="group overflow-hidden rounded-xl border border-white/10 bg-[#0d1320]/60 backdrop-blur-sm transition-all hover:border-emerald-500/20"
+                    className="group overflow-hidden rounded-xl border border-white/10 bg-[#0d1320]/60 backdrop-blur-sm transition-all hover:border-emerald-500/20 cursor-pointer"
+                    onClick={() => setSelectedEvent(event)}
                   >
                     <div className="flex flex-col sm:flex-row">
                       {/* Brochure thumbnail */}
@@ -927,7 +929,7 @@ export default function DashboardPage() {
                                 </Badge>
                               )}
                             </div>
-                            <p className="mt-1.5 text-sm leading-relaxed text-blue-100/50">{event.description}</p>
+                            <p className="mt-1.5 text-sm leading-relaxed text-blue-100/50 line-clamp-2">{event.description}</p>
                           </div>
 
                           {/* Admin delete */}
@@ -938,6 +940,7 @@ export default function DashboardPage() {
                                   size="icon"
                                   variant="ghost"
                                   className="h-8 w-8 shrink-0 text-white/20 hover:bg-red-500/10 hover:text-red-400"
+                                  onClick={(e) => e.stopPropagation()}
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
@@ -994,21 +997,11 @@ export default function DashboardPage() {
                           )}
                         </div>
 
-                        {/* Registration link */}
-                        {event.registration_link && (
-                          <div className="mt-3">
-                            <a href={event.registration_link} target="_blank" rel="noopener noreferrer">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="gap-1.5 border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 hover:text-emerald-200"
-                              >
-                                <ExternalLink className="h-3.5 w-3.5" />
-                                Register
-                              </Button>
-                            </a>
-                          </div>
-                        )}
+                        {/* Tap to view hint */}
+                        <div className="mt-3 flex items-center gap-1 text-xs text-emerald-400/60 group-hover:text-emerald-300 transition-colors">
+                          <ChevronRight className="h-3.5 w-3.5" />
+                          Tap to view details
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1020,6 +1013,98 @@ export default function DashboardPage() {
                 <p className="mt-3 text-blue-100/40">No events yet. Check back soon!</p>
               </div>
             )}
+            {/* ── Event Detail Dialog ──────────────────────── */}
+            <Dialog open={!!selectedEvent} onOpenChange={(open) => { if (!open) setSelectedEvent(null) }}>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0">
+                {selectedEvent && (
+                  <>
+                    {/* Full-size brochure image */}
+                    {selectedEvent.brochure_url && (
+                      <div className="relative w-full">
+                        <img
+                          src={selectedEvent.brochure_url}
+                          alt={`${selectedEvent.title} brochure`}
+                          className="w-full object-contain max-h-[50vh] bg-black/20"
+                        />
+                      </div>
+                    )}
+
+                    <div className="p-6 space-y-5">
+                      {/* Title + Event Type */}
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="text-xl font-bold text-foreground">{selectedEvent.title}</h2>
+                          {selectedEvent.event_type && (
+                            <Badge
+                              variant="outline"
+                              className={`text-xs capitalize ${eventTypeStyles[selectedEvent.event_type] || eventTypeStyles.other}`}
+                            >
+                              {selectedEvent.event_type}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Full description */}
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5">About</p>
+                        <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{selectedEvent.description}</p>
+                      </div>
+
+                      {/* Metadata grid */}
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {selectedEvent.event_date && (
+                          <div className="flex items-start gap-3 rounded-lg border border-border bg-secondary/30 p-3">
+                            <Clock className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
+                            <div>
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Date & Time</p>
+                              <p className="text-sm text-foreground mt-0.5">
+                                {new Date(selectedEvent.event_date).toLocaleDateString('en-US', {
+                                  weekday: 'long',
+                                  month: 'long',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                        {selectedEvent.venue && (
+                          <div className="flex items-start gap-3 rounded-lg border border-border bg-secondary/30 p-3">
+                            <MapPin className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
+                            <div>
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Venue</p>
+                              <p className="text-sm text-foreground mt-0.5">{selectedEvent.venue}</p>
+                            </div>
+                          </div>
+                        )}
+                        {selectedEvent.max_members && (
+                          <div className="flex items-start gap-3 rounded-lg border border-border bg-secondary/30 p-3">
+                            <UserCheck className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
+                            <div>
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Team Size</p>
+                              <p className="text-sm text-foreground mt-0.5">{selectedEvent.max_members} members</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Registration link */}
+                      {selectedEvent.registration_link && (
+                        <a href={selectedEvent.registration_link} target="_blank" rel="noopener noreferrer" className="block">
+                          <Button className="w-full gap-2 bg-emerald-600 text-white hover:bg-emerald-500">
+                            <ExternalLink className="h-4 w-4" />
+                            Register Now
+                          </Button>
+                        </a>
+                      )}
+                    </div>
+                  </>
+                )}
+              </DialogContent>
+            </Dialog>
           </motion.section>
         </motion.div>
       </main>
