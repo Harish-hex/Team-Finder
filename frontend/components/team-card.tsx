@@ -128,11 +128,13 @@ export function TeamCard({ team }: TeamCardProps) {
             <div className="flex items-center gap-3">
               <div className="flex -space-x-2">
                 {/* Show placeholder avatar for creator */}
-                <Avatar className="h-7 w-7 border-2 border-[#0d1320]">
-                  <AvatarFallback className="bg-indigo-500/20 text-xs text-indigo-200">
-                    C
-                  </AvatarFallback>
-                </Avatar>
+                <Link href={`/profile/${team.created_by}`} onClick={(e) => e.stopPropagation()}>
+                  <Avatar className="h-7 w-7 border-2 border-[#0d1320] hover:border-indigo-400 transition-colors cursor-pointer">
+                    <AvatarFallback className="bg-indigo-500/20 text-xs text-indigo-200 hover:bg-indigo-500/30 transition-colors">
+                      C
+                    </AvatarFallback>
+                  </Avatar>
+                </Link>
               </div>
               <div className="flex items-center gap-2 text-xs text-blue-100/40">
                 <Badge variant="outline" className={`${eventTypeColors[team.event_type] || ''} text-xs`}>

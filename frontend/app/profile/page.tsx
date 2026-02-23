@@ -432,20 +432,24 @@ export default function ProfilePage() {
                                   <div key={app.id} className="rounded-xl border border-border bg-secondary/20 p-5 space-y-4">
                                     {/* Applicant Header */}
                                     <div className="flex items-start gap-4">
-                                      <Avatar className="h-14 w-14 border-2 border-border shrink-0">
-                                        <AvatarImage
-                                          src={app.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${app.display_name}`}
-                                          alt={app.display_name || 'Applicant'}
-                                        />
-                                        <AvatarFallback className="bg-violet-500 text-violet-50 text-lg">
-                                          {app.display_name?.charAt(0) || 'U'}
-                                        </AvatarFallback>
-                                      </Avatar>
+                                      <Link href={`/profile/${app.user_id}`} target="_blank">
+                                        <Avatar className="h-14 w-14 border-2 border-border shrink-0 hover:border-indigo-400 transition-colors cursor-pointer">
+                                          <AvatarImage
+                                            src={app.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${app.display_name}`}
+                                            alt={app.display_name || 'Applicant'}
+                                          />
+                                          <AvatarFallback className="bg-violet-500 text-violet-50 text-lg">
+                                            {app.display_name?.charAt(0) || 'U'}
+                                          </AvatarFallback>
+                                        </Avatar>
+                                      </Link>
                                       <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 flex-wrap">
-                                          <h3 className="text-base font-semibold text-foreground">
-                                            {app.display_name || 'Unknown User'}
-                                          </h3>
+                                          <Link href={`/profile/${app.user_id}`} target="_blank">
+                                            <h3 className="text-base font-semibold text-foreground hover:text-indigo-400 transition-colors hover:underline">
+                                              {app.display_name || 'Unknown User'}
+                                            </h3>
+                                          </Link>
                                           {app.experience_level && (
                                             <Badge
                                               variant="outline"
